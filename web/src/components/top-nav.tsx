@@ -158,7 +158,6 @@ export function TopNav() {
     let cancelled = false;
 
     const loadSession = async () => {
-      setSessionLoaded(false);
       try {
         const session = await getStoredAuthSession();
         if (!cancelled) {
@@ -177,7 +176,7 @@ export function TopNav() {
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, []);
 
   const handleLogout = async () => {
     await clearStoredAuthKey();
