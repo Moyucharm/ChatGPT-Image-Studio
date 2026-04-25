@@ -192,6 +192,7 @@ export function TopNav() {
   }
 
   const visibleNavItems = sessionRole === "guest" ? navItems.filter((item) => !item.requiresAdmin) : navItems;
+  const defaultCollapsed = sessionRole === "guest" ? false : isImageRoute;
   const mobileGridClass = visibleNavItems.length > 1 ? "grid-cols-2" : "grid-cols-1";
 
   return (
@@ -241,7 +242,7 @@ export function TopNav() {
       </header>
       <DesktopTopNav
         pathname={pathname}
-        defaultCollapsed={isImageRoute}
+        defaultCollapsed={defaultCollapsed}
         versionLabel={versionLabel}
         onLogout={handleLogout}
         navItems={visibleNavItems}
