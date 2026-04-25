@@ -102,9 +102,10 @@ chmod +x ./scripts/*.sh
 
 镜像发布规则：
 
-- 推送到 `main` 分支后，GitHub Actions 会自动更新 `ghcr.io/peiyizhi0724/chatgpt-image-studio:latest`
+- 推送到默认分支后，GitHub Actions 会自动更新 `ghcr.io/<当前仓库 owner>/chatgpt-image-studio:latest`
 - 推送版本标签 `v1.2.x` 后，会额外发布同名版本镜像标签
 - Docker 镜像同时提供 `linux/amd64` 与 `linux/arm64`
+- fork 仓库会发布到自己的 GHCR 命名空间，例如 `ghcr.io/<你的 GitHub 用户名>/chatgpt-image-studio:latest`
 
 ### 首次启动
 
@@ -115,13 +116,37 @@ docker compose up -d
 
 默认会：
 
-- 使用 `ghcr.io/peiyizhi0724/chatgpt-image-studio:latest`，也就是 `main` 分支当前最新镜像
+- 使用 `ghcr.io/peiyizhi0724/chatgpt-image-studio:latest`，也就是默认上游仓库当前最新镜像
 - 将宿主机的 `./backend/data` 挂载到容器内 `/app/data`
 - 对外暴露 `7000` 端口
+
+如果你要部署自己 fork 仓库发布的镜像，可先设置：
+
+```bash
+export IMAGE_NAME=ghcr.io/<你的 GitHub 用户名>/chatgpt-image-studio
+docker compose pull
+docker compose up -d
+```
+
+Windows PowerShell：
+
+```powershell
+$env:IMAGE_NAME = "ghcr.io/<你的 GitHub 用户名>/chatgpt-image-studio"
+docker compose pull
+docker compose up -d
+```
+
+如果你希望 `docker compose pull` 和一键更新脚本持续使用同一个 fork 镜像，建议在仓库根目录创建 `.env`：
+
+```dotenv
+IMAGE_NAME=ghcr.io/<你的 GitHub 用户名>/chatgpt-image-studio
+IMAGE_TAG=latest
+```
 
 如需固定到某个版本，可先设置：
 
 ```bash
+export IMAGE_NAME=ghcr.io/<你的 GitHub 用户名>/chatgpt-image-studio  # 部署上游镜像时可省略
 export IMAGE_TAG=v1.2.7
 docker compose pull
 docker compose up -d
@@ -130,6 +155,7 @@ docker compose up -d
 Windows PowerShell：
 
 ```powershell
+$env:IMAGE_NAME = "ghcr.io/<你的 GitHub 用户名>/chatgpt-image-studio" # 部署上游镜像时可省略
 $env:IMAGE_TAG = "v1.2.7"
 docker compose pull
 docker compose up -d
@@ -154,7 +180,7 @@ chmod +x ./scripts/docker-update.sh
 
 1. 检查 Docker / Docker Compose
 2. 如果当前目录是 Git 仓库，则先 `git pull --ff-only origin main`
-3. 从 GitHub Container Registry 拉取 `latest` 镜像
+3. 从 GitHub Container Registry 拉取 `IMAGE_NAME:IMAGE_TAG` 对应镜像（默认是上游 `latest`）
 4. 重新创建并启动容器
 
 ### 配置文件

@@ -1,6 +1,6 @@
 services:
   studio:
-    image: ghcr.io/peiyizhi0724/chatgpt-image-studio:${IMAGE_TAG:-latest}
+    image: ${IMAGE_NAME:-ghcr.io/peiyizhi0724/chatgpt-image-studio}:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile
