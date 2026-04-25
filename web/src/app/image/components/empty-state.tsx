@@ -22,7 +22,7 @@ export function EmptyState({ inspirationExamples, onApplyPromptExample }: EmptyS
   return (
     <div className="mx-auto flex max-w-[1120px] flex-col gap-8 px-4 py-8 sm:px-6">
       <div className="max-w-[760px]">
-        <div className="inline-flex size-14 items-center justify-center rounded-[20px] bg-stone-950 text-white shadow-sm">
+        <div className="inline-flex size-14 items-center justify-center rounded-xl bg-stone-950 text-white shadow-sm">
           <Sparkles className="size-5" />
         </div>
         <h1 className="mt-6 text-3xl font-semibold tracking-tight text-stone-950 lg:text-5xl">
@@ -36,12 +36,12 @@ export function EmptyState({ inspirationExamples, onApplyPromptExample }: EmptyS
             key={example.id}
             type="button"
             onClick={() => onApplyPromptExample(example)}
-            className="w-[220px] shrink-0 overflow-hidden rounded-[22px] border border-stone-200 bg-white text-left transition hover:-translate-y-0.5 hover:border-stone-300 hover:shadow-sm md:w-auto"
+            className="w-[220px] shrink-0 overflow-hidden rounded-xl border border-stone-200 bg-white text-left transition hover:-translate-y-0.5 hover:border-stone-300 hover:shadow-sm md:w-auto"
           >
             <div className={cn("h-[4.5rem] bg-gradient-to-br md:h-20", example.tone)} />
             <div className="space-y-2 px-4 py-3.5">
               <div className="flex items-center gap-2 text-[11px] text-stone-500">
-                <span className="rounded-full bg-stone-100 px-2 py-0.5 font-medium">Prompt</span>
+                <span className="rounded-md bg-stone-100 px-2 py-0.5 font-medium">Prompt</span>
               </div>
               <div className="text-sm font-semibold tracking-tight text-stone-900">{example.title}</div>
               <div className="line-clamp-2 text-sm leading-6 text-stone-600">{example.prompt}</div>

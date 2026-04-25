@@ -22,4 +22,4 @@ fi
 
 echo "[3/3] Starting backend on configured port..."
 cd "$BACKEND_DIR"
-go run .
+SERVER_PORT=7001 go run .

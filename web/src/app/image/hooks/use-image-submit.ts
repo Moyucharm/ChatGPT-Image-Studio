@@ -180,15 +180,6 @@ export function useImageSubmit({
     setImagePrompt("");
     setSourceImages([]);
     closeSelectionEditor();
-    startImageTask({
-      conversationId,
-      turnId,
-      mode: "edit",
-      count: 1,
-      variant: "selection-edit",
-      startedAt,
-    });
-
     try {
       await updateConversation(conversationId, (current) => {
         if (!current) {
@@ -198,6 +189,15 @@ export function useImageSubmit({
           ...current,
           turns: [...(current.turns ?? []), draftTurn],
         };
+      });
+
+      startImageTask({
+        conversationId,
+        turnId,
+        mode: "edit",
+        count: 1,
+        variant: "selection-edit",
+        startedAt,
       });
 
       let fallbackImageFile = sourceReference
@@ -344,20 +344,20 @@ export function useImageSubmit({
     setSubmitElapsedSeconds(0);
     setSubmitStartedAt(startedAt);
     focusConversation(conversationId);
-    startImageTask({
-      conversationId,
-      turnId,
-      mode: turnMode,
-      count: expectedCount,
-      variant: "standard",
-      startedAt,
-    });
-
     try {
       await updateConversation(conversationId, (current) => ({
         ...(current ?? buildConversationBase(conversationId, draftTurn)),
         turns: current?.turns?.map((item) => (item.id === turnId ? draftTurn : item)) ?? [draftTurn],
       }));
+
+      startImageTask({
+        conversationId,
+        turnId,
+        mode: turnMode,
+        count: expectedCount,
+        variant: "standard",
+        startedAt,
+      });
 
       let resultItems: StoredImage[] = [];
       if (turnMode === "generate") {
@@ -494,15 +494,6 @@ export function useImageSubmit({
     focusConversation(conversationId);
     setImagePrompt("");
     setSourceImages([]);
-    startImageTask({
-      conversationId,
-      turnId,
-      mode,
-      count: expectedCount,
-      variant: "standard",
-      startedAt,
-    });
-
     try {
       if (selectedConversationId) {
         await updateConversation(conversationId, (current) => ({
@@ -512,6 +503,15 @@ export function useImageSubmit({
       } else {
         await persistConversation(buildConversationBase(conversationId, draftTurn));
       }
+
+      startImageTask({
+        conversationId,
+        turnId,
+        mode,
+        count: expectedCount,
+        variant: "standard",
+        startedAt,
+      });
 
       let resultItems: StoredImage[] = [];
       if (mode === "generate") {

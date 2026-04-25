@@ -121,7 +121,7 @@ export function ConversationTurns({
                     {turn.sourceImages.map((source) => (
                       <div
                         key={source.id}
-                        className="w-[136px] overflow-hidden rounded-[20px] border border-stone-200 bg-white shadow-sm"
+                        className="w-[136px] overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm"
                       >
                         <div className="border-b border-stone-100 px-3 py-2 text-left text-[11px] font-medium text-stone-500">
                           {buildConversationSourceLabel(source)}
@@ -141,13 +141,13 @@ export function ConversationTurns({
                   </div>
                 ) : null}
                 <div className="group flex max-w-full flex-col items-start gap-1.5">
-                  <div className="min-w-0 whitespace-pre-wrap break-words rounded-[28px] bg-[#f2f2f1] px-5 py-4 text-[15px] leading-7 text-stone-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
+                  <div className="min-w-0 whitespace-pre-wrap break-words rounded-xl bg-[#f2f2f1] px-4 py-3 text-[15px] leading-7 text-stone-800">
                     {turn.prompt || "无额外提示词"}
                   </div>
                   <button
                     type="button"
                     onClick={() => void copyPromptToClipboard(turn.prompt || "")}
-                    className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-500 opacity-0 shadow-sm transition hover:bg-stone-100 hover:text-stone-900 focus-visible:opacity-100 focus-visible:outline-none group-hover:opacity-100"
+                    className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-500 opacity-0 shadow-sm transition hover:bg-stone-100 hover:text-stone-900 focus-visible:opacity-100 focus-visible:outline-none group-hover:opacity-100"
                     title="复制提示词"
                     aria-label="复制提示词"
                   >
@@ -160,7 +160,7 @@ export function ConversationTurns({
 
             <div className="space-y-4">
               <div className="flex items-center gap-3 px-1">
-                <span className="flex size-9 items-center justify-center rounded-2xl bg-stone-950 text-white">
+                <span className="flex size-9 items-center justify-center rounded-lg bg-stone-950 text-white">
                   <Sparkles className="size-4" />
                 </span>
                 <div>
@@ -169,13 +169,13 @@ export function ConversationTurns({
               </div>
 
               <div className="flex flex-wrap items-center gap-2 px-1 text-xs text-stone-500">
-                <span className="rounded-full bg-stone-100 px-3 py-1.5">{modeLabelMap[turn.mode]}</span>
-                <span className="rounded-full bg-stone-100 px-3 py-1.5">{turn.model}</span>
-                <span className="rounded-full bg-stone-100 px-3 py-1.5">{turn.count} 张</span>
-                {turn.size ? <span className="rounded-full bg-stone-100 px-3 py-1.5">{formatTurnSizeLabel(turn.size)}</span> : null}
-                {turn.quality ? <span className="rounded-full bg-stone-100 px-3 py-1.5">Quality {turn.quality}</span> : null}
-                {turn.scale ? <span className="rounded-full bg-stone-100 px-3 py-1.5">{turn.scale}</span> : null}
-                <span className="rounded-full bg-stone-100 px-3 py-1.5">
+        <span className="rounded-md bg-stone-100 px-2.5 py-1">{modeLabelMap[turn.mode]}</span>
+        <span className="rounded-md bg-stone-100 px-2.5 py-1">{turn.model}</span>
+        <span className="rounded-md bg-stone-100 px-2.5 py-1">{turn.count} 张</span>
+        {turn.size ? <span className="rounded-md bg-stone-100 px-2.5 py-1">{formatTurnSizeLabel(turn.size)}</span> : null}
+        {turn.quality ? <span className="rounded-md bg-stone-100 px-2.5 py-1">Quality {turn.quality}</span> : null}
+        {turn.scale ? <span className="rounded-md bg-stone-100 px-2.5 py-1">{turn.scale}</span> : null}
+        <span className="rounded-md bg-stone-100 px-2.5 py-1">
                   <Clock3 className="mr-1 inline size-3.5" />
                   {formatConversationTime(turn.createdAt)}
                 </span>
@@ -196,7 +196,7 @@ export function ConversationTurns({
                       <div
                         key={image.id}
                         className={cn(
-                          "overflow-hidden rounded-[22px] border border-stone-200 bg-white shadow-sm",
+                          "group relative overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm",
                           turn.images.length === 1 && "w-fit max-w-full justify-self-start",
                         )}
                       >
@@ -209,13 +209,13 @@ export function ConversationTurns({
                                 width={1024}
                                 height={1024}
                                 unoptimized
-                                className="block h-auto max-h-[360px] w-auto max-w-full cursor-zoom-in"
+                                className="block h-auto max-h-[60vh] w-auto max-w-full object-contain cursor-zoom-in"
                               />
                             </Zoom>
-                            <div className="flex flex-wrap items-center gap-2 border-t border-stone-100 px-4 py-3">
+                            <div className="absolute bottom-2 right-2 flex flex-wrap items-center gap-1 rounded-lg bg-black/60 p-1 opacity-0 transition-opacity group-hover:opacity-100">
                               <button
                                 type="button"
-                                className="inline-flex size-9 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-600 transition hover:bg-stone-100 hover:text-stone-900"
+                                className="inline-flex size-8 items-center justify-center rounded-md text-white/90 transition hover:bg-white/20 hover:text-white"
                                 onClick={() =>
                                   onOpenSelectionEditor(
                                     conversationId,
@@ -231,7 +231,7 @@ export function ConversationTurns({
                               </button>
                               <button
                                 type="button"
-                                className="inline-flex size-9 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-600 transition hover:bg-stone-100 hover:text-stone-900"
+                                className="inline-flex size-8 items-center justify-center rounded-md text-white/90 transition hover:bg-white/20 hover:text-white"
                                 onClick={() => onSeedFromResult(conversationId, image, "edit")}
                                 title="引用"
                                 aria-label="引用"
@@ -240,7 +240,7 @@ export function ConversationTurns({
                               </button>
                               <button
                                 type="button"
-                                className="inline-flex size-9 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-600 transition hover:bg-stone-100 hover:text-stone-900"
+                                className="inline-flex size-8 items-center justify-center rounded-md text-white/90 transition hover:bg-white/20 hover:text-white"
                                 onClick={() => onSeedFromResult(conversationId, image, "upscale")}
                                 title="放大"
                                 aria-label="放大"
@@ -250,7 +250,7 @@ export function ConversationTurns({
                               <a
                                 href={imageDataUrl}
                                 download={downloadName}
-                                className="inline-flex size-9 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-600 transition hover:bg-stone-100 hover:text-stone-900"
+                                className="inline-flex size-8 items-center justify-center rounded-md text-white/90 transition hover:bg-white/20 hover:text-white"
                                 title="下载"
                                 aria-label="下载"
                               >
@@ -266,7 +266,7 @@ export function ConversationTurns({
                             <div className="flex flex-wrap items-center gap-2 border-t border-stone-100 px-4 py-3">
                               <button
                                 type="button"
-                                className="inline-flex size-9 items-center justify-center rounded-full border border-stone-200 bg-white text-rose-600 transition hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                className="inline-flex size-8 items-center justify-center rounded-md border border-stone-200 bg-white text-rose-600 transition hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
                                 onClick={() => void onRetryTurn(conversationId, turn)}
                                 disabled={isSubmitting}
                                 title={isSubmitting ? "处理中" : "重试"}
@@ -278,7 +278,7 @@ export function ConversationTurns({
                           </div>
                         ) : (
                           <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 bg-stone-50 px-6 py-8 text-center text-stone-500">
-                            <div className="rounded-full bg-white p-3 shadow-sm">
+                            <div className="rounded-lg bg-white p-2.5 shadow-sm">
                               <LoaderCircle className="size-5 animate-spin" />
                             </div>
                             <p className="text-sm font-medium text-stone-700">

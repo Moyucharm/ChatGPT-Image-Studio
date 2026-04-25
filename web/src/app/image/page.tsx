@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "react-medium-image-zoom/dist/styles.css";
-import { ChevronsDown } from "lucide-react";
+import { ChevronsDown, PanelLeftOpen } from "lucide-react";
 
 import { ImageEditModal } from "@/components/image-edit-modal";
-import { fetchAccounts, fetchConfig, type Account, type ImageQuality } from "@/lib/api";
+import { fetchImageBootstrap, type ImageQuality } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   normalizeConversation,
@@ -25,7 +25,7 @@ import { useImageSourceInputs } from "./hooks/use-image-source-inputs";
 import { useImageSubmit } from "./hooks/use-image-submit";
 import { buildConversationPreviewSource } from "./view-utils";
 
-type ImageAspectRatio = "1:1" | "4:3" | "3:2" | "16:9" | "21:9" | "9:16";
+type ImageAspectRatio = "auto" | "1:1" | "4:3" | "3:2" | "16:9" | "21:9" | "9:16";
 type ImageResolutionTier = "sd" | "2k" | "4k";
 type ImageResolutionAccess = "free" | "paid";
 type ImageResolutionPreset = {
@@ -36,6 +36,7 @@ type ImageResolutionPreset = {
 };
 
 const imageAspectRatioOptions: Array<{ label: string; value: ImageAspectRatio }> = [
+  { label: "Auto", value: "auto" },
   { label: "1:1", value: "1:1" },
   { label: "4:3", value: "4:3" },
   { label: "3:2", value: "3:2" },
@@ -45,6 +46,9 @@ const imageAspectRatioOptions: Array<{ label: string; value: ImageAspectRatio }>
 ];
 
 const imageResolutionPresets: Record<ImageAspectRatio, ImageResolutionPreset[]> = {
+  auto: [
+    { tier: "sd", label: "Auto 智能匹配", value: "auto", access: "free" },
+  ],
   "1:1": [
     { tier: "sd", label: "Free 实际档", value: "1248x1248", access: "free" },
     { tier: "2k", label: "Paid 2K", value: "2048x2048", access: "paid" },
@@ -165,32 +169,6 @@ function formatConversationTime(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
-}
-
-function formatAvailableQuota(accounts: Account[], allowDisabled: boolean) {
-  const availableAccounts = accounts.filter((account) => isImageAccountUsable(account, allowDisabled));
-  return String(availableAccounts.reduce((sum, account) => sum + getImageRemaining(account), 0));
-}
-
-function getImageRemaining(account: Account) {
-  const limit = account.limits_progress?.find((item) => item.feature_name === "image_gen");
-  if (typeof limit?.remaining === "number") {
-    return Math.max(0, limit.remaining);
-  }
-  return Math.max(0, account.quota);
-}
-
-function isImageAccountUsable(account: Account, allowDisabled: boolean) {
-  const disabled = Boolean(account.disabled) || account.status === "禁用";
-  return (!disabled || allowDisabled) && account.status !== "异常" && account.status !== "限流" && getImageRemaining(account) > 0;
-}
-
-function hasAvailablePaidImageAccount(accounts: Account[], allowDisabled: boolean) {
-  return accounts.some(
-    (account) =>
-      isImageAccountUsable(account, allowDisabled) &&
-      (account.type === "Plus" || account.type === "Pro" || account.type === "Team"),
-  );
 }
 
 async function normalizeConversationHistory(items: ImageConversation[]) {
@@ -341,15 +319,14 @@ export default function ImagePage() {
   const [mode, setMode] = useState<ImageMode>("generate");
   const [imagePrompt, setImagePrompt] = useState("");
   const [imageCount, setImageCount] = useState("1");
-  const [imageAspectRatio, setImageAspectRatio] = useState<ImageAspectRatio>("1:1");
+  const [imageAspectRatio, setImageAspectRatio] = useState<ImageAspectRatio>("auto");
   const [imageResolutionTier, setImageResolutionTier] = useState<ImageResolutionTier>("sd");
   const [imageQuality, setImageQuality] = useState<ImageQuality>("high");
   const [upscaleScale, setUpscaleScale] = useState("2x");
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [availableQuota, setAvailableQuota] = useState("加载中");
-  const [availableAccounts, setAvailableAccounts] = useState<Account[]>([]);
-  const [allowDisabledStudioAccounts, setAllowDisabledStudioAccounts] = useState(false);
+  const [hasAvailablePaidAccount, setHasAvailablePaidAccount] = useState(false);
   const [activeRequest, setActiveRequest] = useState<ActiveRequestState | null>(null);
   const [submitStartedAt, setSubmitStartedAt] = useState<number | null>(null);
   const [submitElapsedSeconds, setSubmitElapsedSeconds] = useState(0);
@@ -438,10 +415,6 @@ export default function ImagePage() {
     return `${selectedConversationLastTurn.id}:${selectedConversationLastTurn.status}:${imageKey}`;
   }, [selectedConversationLastTurn]);
   const parsedCount = useMemo(() => Math.max(1, Math.min(8, Number(imageCount) || 1)), [imageCount]);
-  const hasAvailablePaidAccount = useMemo(
-    () => hasAvailablePaidImageAccount(availableAccounts, allowDisabledStudioAccounts),
-    [allowDisabledStudioAccounts, availableAccounts],
-  );
   const currentResolutionPresets = useMemo(() => imageResolutionPresets[imageAspectRatio], [imageAspectRatio]);
   const imageResolutionTierOptions = useMemo(
     () =>
@@ -533,17 +506,13 @@ export default function ImagePage() {
   }, [refreshHistory, selectedConversationId, syncRuntimeTaskState]);
 
   useEffect(() => {
-    const loadQuota = async () => {
+    const loadBootstrap = async () => {
       try {
-        const [accountsData, configData] = await Promise.all([fetchAccounts(), fetchConfig()]);
-        const allowDisabled =
-          configData.chatgpt.imageMode === "studio" && configData.chatgpt.studioAllowDisabledImageAccounts;
-        setAllowDisabledStudioAccounts(allowDisabled);
-        setAvailableAccounts(accountsData.items);
-        setAvailableQuota(formatAvailableQuota(accountsData.items, allowDisabled));
+        const bootstrap = await fetchImageBootstrap();
+        setAvailableQuota(bootstrap.availableQuota);
+        setHasAvailablePaidAccount(bootstrap.hasAvailablePaidAccount);
       } catch {
-        setAvailableAccounts([]);
-        setAllowDisabledStudioAccounts(false);
+        setHasAvailablePaidAccount(false);
         setAvailableQuota((prev) => (prev === "加载中" ? "—" : prev));
       }
     };
@@ -552,7 +521,7 @@ export default function ImagePage() {
       return;
     }
     didLoadQuotaRef.current = true;
-    void loadQuota();
+    void loadBootstrap();
   }, []);
 
   useEffect(() => {
@@ -759,15 +728,22 @@ export default function ImagePage() {
           onClearHistory={handleClearHistory}
           onFocusConversation={focusConversation}
           onDeleteConversation={handleDeleteConversation}
+          onCloseHistory={() => setHistoryCollapsed(true)}
         />
       ) : null}
 
-      <div className="order-1 flex min-h-0 flex-col overflow-hidden rounded-[30px] border border-stone-200 bg-white shadow-[0_14px_40px_rgba(15,23,42,0.05)] lg:order-none">
-        <WorkspaceHeader
-          historyCollapsed={historyCollapsed}
-          selectedConversationTitle={selectedConversation?.title}
-          onToggleHistory={() => setHistoryCollapsed((current) => !current)}
-        />
+      <div className="relative order-1 flex min-h-0 flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm lg:order-none">
+        {historyCollapsed ? (
+          <button
+            type="button"
+            className="absolute left-2.5 top-2.5 z-20 flex size-8 items-center justify-center rounded-lg border border-stone-200 bg-white/80 text-stone-500 shadow-sm backdrop-blur-md transition hover:bg-white hover:text-stone-900"
+            onClick={() => setHistoryCollapsed(false)}
+            title="展开历史"
+            aria-label="展开历史"
+          >
+            <PanelLeftOpen className="size-4" />
+          </button>
+        ) : null}
 
         <div className="relative min-h-0 flex-1 bg-[#fcfcfb]">
           <div ref={resultsViewportRef} className="hide-scrollbar h-full min-h-0 overflow-y-auto">
@@ -795,7 +771,7 @@ export default function ImagePage() {
             <button
               type="button"
               onClick={() => scrollToBottom("smooth")}
-              className="absolute bottom-5 right-5 z-10 inline-flex size-11 items-center justify-center rounded-full border border-stone-200 bg-white/95 text-stone-700 shadow-lg shadow-stone-300/30 backdrop-blur transition hover:bg-white hover:text-stone-950"
+              className="absolute bottom-4 right-4 z-10 inline-flex size-9 items-center justify-center rounded-lg border border-stone-200 bg-white/90 text-stone-600 shadow-sm backdrop-blur transition hover:bg-white hover:text-stone-900"
               aria-label="滚动到底部"
               title="滚动到底部"
             >

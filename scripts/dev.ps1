@@ -40,6 +40,7 @@ if ($watcher.HasExited) {
 
 Write-Host "[3/3] Starting backend on configured port..."
 Push-Location $backendDir
+$env:SERVER_PORT = "7001"
 try {
   go run .
   Assert-LastExitCode "go run ."

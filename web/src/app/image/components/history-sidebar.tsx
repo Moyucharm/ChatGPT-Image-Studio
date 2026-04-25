@@ -1,6 +1,6 @@
 "use client";
 
-import { History, LoaderCircle, MessageSquarePlus, Trash2 } from "lucide-react";
+import { History, LoaderCircle, MessageSquarePlus, PanelLeftClose, Trash2 } from "lucide-react";
 
 import { AppImage as Image } from "@/components/app-image";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ type HistorySidebarProps = {
   onClearHistory: () => Promise<void>;
   onFocusConversation: (id: string) => void;
   onDeleteConversation: (id: string) => Promise<void>;
+  onCloseHistory: () => void;
 };
 
 export function HistorySidebar({
@@ -35,27 +36,36 @@ export function HistorySidebar({
   onClearHistory,
   onFocusConversation,
   onDeleteConversation,
+  onCloseHistory,
 }: HistorySidebarProps) {
   return (
-    <aside className="order-2 max-h-[36vh] overflow-hidden rounded-[28px] border border-stone-200 bg-[#f8f8f7] shadow-[0_8px_30px_rgba(15,23,42,0.04)] lg:order-none lg:max-h-none lg:min-h-0">
+    <aside className="order-2 max-h-[36vh] overflow-hidden rounded-xl border border-stone-200 bg-[#f8f8f7] shadow-sm lg:order-none lg:max-h-none lg:min-h-0">
       <div className="flex h-full min-h-0 flex-col">
-        <div className="border-b border-stone-200/80 px-4 py-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight text-stone-900">历史记录</h2>
+        <div className="border-b border-stone-200/80 px-4 py-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex size-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 shadow-sm transition hover:bg-stone-50 hover:text-stone-900"
+                onClick={onCloseHistory}
+                title="收起历史面板"
+              >
+                <PanelLeftClose className="size-4" />
+              </button>
+              <h2 className="text-base font-semibold tracking-tight text-stone-900">历史记录</h2>
             </div>
-            <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-stone-500 shadow-sm">
+            <span className="rounded-full bg-white px-2.5 py-0.5 text-[11px] font-medium text-stone-400 border border-stone-100 shadow-sm">
               {conversations.length}
             </span>
           </div>
-          <div className="mt-4 flex items-center gap-2">
-            <Button className="h-11 flex-1 rounded-2xl bg-stone-950 text-white hover:bg-stone-800" onClick={onCreateDraft}>
-              <MessageSquarePlus className="size-4" />
+          <div className="mt-3 flex items-center gap-2">
+            <Button className="h-9 flex-1 rounded-lg bg-stone-950 text-[13px] text-white hover:bg-stone-800" onClick={onCreateDraft}>
+              <MessageSquarePlus className="mr-1.5 size-4" />
               新建对话
             </Button>
             <Button
               variant="outline"
-              className="h-11 rounded-2xl border-stone-200 bg-white px-3 text-stone-600 hover:bg-stone-50"
+              className="h-9 rounded-lg border-stone-200 bg-white px-2.5 text-stone-500 hover:bg-stone-50"
               onClick={() => void onClearHistory()}
               disabled={conversations.length === 0 || hasActiveTasks}
               title={hasActiveTasks ? "有任务运行中时不能清空历史" : "清空历史记录"}
@@ -67,7 +77,7 @@ export function HistorySidebar({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
           {isLoadingHistory ? (
-            <div className="flex items-center gap-2 rounded-2xl px-3 py-3 text-sm text-stone-500">
+            <div className="flex items-center gap-2 rounded-lg px-3 py-3 text-sm text-stone-500">
               <LoaderCircle className="size-4 animate-spin" />
               正在读取会话记录
             </div>
@@ -85,53 +95,49 @@ export function HistorySidebar({
                   <div
                     key={conversation.id}
                     className={cn(
-                      "group rounded-[22px] border p-2 transition",
+                      "group rounded-xl border p-1.5 transition",
                       active
                         ? "border-stone-200 bg-white shadow-sm"
                         : "border-transparent bg-transparent hover:border-stone-200/80 hover:bg-white/70",
                     )}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2.5">
                       <button
                         type="button"
+                        className="relative size-10 shrink-0 overflow-hidden rounded-lg border border-stone-100 bg-stone-50"
                         onClick={() => onFocusConversation(conversation.id)}
-                        className="flex min-w-0 flex-1 items-center gap-3 text-left"
                       >
-                        <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-stone-100">
-                          {previewSrc ? (
-                            <Image
-                              src={previewSrc}
-                              alt={conversation.title}
-                              width={56}
-                              height={56}
-                              unoptimized
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <History className="size-4 text-stone-400" />
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-500">
-                              {modeLabelMap[conversation.mode]}
-                            </span>
-                            <span className="truncate text-xs text-stone-400">
-                              {formatConversationTime(conversation.createdAt)}
-                            </span>
-                          </div>
-                          <div className="mt-2 truncate text-sm font-medium text-stone-800">{conversation.title}</div>
-                          <div className="mt-1 line-clamp-2 text-xs leading-5 text-stone-500">
-                            {conversation.prompt || "无额外提示词"}
-                          </div>
-                        </div>
+                        <Image
+                          src={previewSrc}
+                          alt={conversation.title}
+                          width={48}
+                          height={48}
+                          unoptimized
+                          className="h-full w-full object-cover"
+                        />
                       </button>
+                      <div className="min-w-0 flex-1">
+                        <button
+                          type="button"
+                          className="block w-full text-left"
+                          onClick={() => onFocusConversation(conversation.id)}
+                        >
+                          <div className="truncate text-[13px] font-medium text-stone-900">
+                            {conversation.title || "未命名会话"}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[11px] text-stone-400">
+                            <span>{modeLabelMap[conversation.mode]}</span>
+                            <span>•</span>
+                            <span>{formatConversationTime(conversation.createdAt)}</span>
+                          </div>
+                        </button>
+                      </div>
                       <button
                         type="button"
                         onClick={() => void onDeleteConversation(conversation.id)}
                         disabled={isDeletingDisabled}
                         title={isDeletingDisabled ? "当前会话仍在处理中，暂时不能删除" : "删除会话"}
-                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl text-stone-400 opacity-100 transition hover:bg-stone-100 hover:text-rose-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-stone-400 lg:opacity-0 lg:group-hover:opacity-100 lg:disabled:opacity-40"
+                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 opacity-100 transition hover:bg-stone-100 hover:text-rose-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-stone-400 lg:opacity-0 lg:group-hover:opacity-100 lg:disabled:opacity-40"
                         aria-label="删除会话"
                       >
                         <Trash2 className="size-4" />
