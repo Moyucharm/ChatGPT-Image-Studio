@@ -39,6 +39,10 @@ type AppConfig struct {
 	MaxUploadSizeMB int    `toml:"max_upload_size_mb"`
 }
 
+type GuestConfig struct {
+	Password string `toml:"password"`
+}
+
 type ServerConfig struct {
 	Host      string `toml:"host"`
 	Port      int    `toml:"port"`
@@ -106,6 +110,7 @@ type Config struct {
 	paths  Paths        `toml:"-"`
 
 	App      AppConfig      `toml:"app"`
+	Guest    GuestConfig    `toml:"guest"`
 	Server   ServerConfig   `toml:"server"`
 	ChatGPT  ChatGPTConfig  `toml:"chatgpt"`
 	Accounts AccountsConfig `toml:"accounts"`
@@ -341,6 +346,7 @@ func (c *Config) lookup(key string) (any, bool) {
 
 func (c *Config) copyFrom(other *Config) {
 	c.App = other.App
+	c.Guest = other.Guest
 	c.Server = other.Server
 	c.ChatGPT = other.ChatGPT
 	c.Accounts = other.Accounts
@@ -543,16 +549,25 @@ func sanitizeOverrideMap(raw map[string]any) bool {
 	}
 
 	changed := false
-	chatgptSection, ok := raw["chatgpt"].(map[string]any)
-	if !ok {
-		return false
-	}
-	if value, ok := chatgptSection["image_mode"]; ok {
-		sanitized := sanitizeOverrideEntry("chatgpt", "image_mode", value)
-		if !reflect.DeepEqual(sanitized, value) {
-			chatgptSection["image_mode"] = sanitized
-			changed = true
+	if chatgptSection, ok := raw["chatgpt"].(map[string]any); ok {
+		if value, ok := chatgptSection["image_mode"]; ok {
+			sanitized := sanitizeOverrideEntry("chatgpt", "image_mode", value)
+			if !reflect.DeepEqual(sanitized, value) {
+				chatgptSection["image_mode"] = sanitized
+				changed = true
+			}
 		}
+	}
+
+	guestSection, ok := raw["guest"].(map[string]any)
+	if !ok {
+		raw["guest"] = map[string]any{"password": ""}
+		changed = true
+		return changed
+	}
+	if _, ok := guestSection["password"]; !ok {
+		guestSection["password"] = ""
+		changed = true
 	}
 	return changed
 }

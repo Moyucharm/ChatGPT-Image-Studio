@@ -97,6 +97,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /v1/chat/completions", s.requireImageAuth(http.HandlerFunc(s.handleImageChatCompletions)))
 	mux.Handle("POST /v1/responses", s.requireImageAuth(http.HandlerFunc(s.handleImageResponses)))
 	mux.Handle("GET /v1/models", s.requireImageAuth(http.HandlerFunc(s.handleModels)))
+	mux.Handle("GET /api/image/bootstrap", s.requireImageAuth(http.HandlerFunc(s.handleImageBootstrap)))
 	mux.Handle("GET /v1/files/image/", handleImageFile())
 
 	mux.Handle("/", http.HandlerFunc(s.handleWebApp))
@@ -106,12 +107,14 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	if !s.hasExactBearer(r, s.cfg.App.AuthKey) {
+	role, ok := s.authRoleForToken(bearerFromRequest(r))
+	if !ok {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "authorization is invalid"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":      true,
+		"role":    role,
 		"version": buildinfo.ResolveVersion(s.cfg.App.Version),
 	})
 }
@@ -121,6 +124,25 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 		"version":   buildinfo.ResolveVersion(s.cfg.App.Version),
 		"commit":    buildinfo.Commit,
 		"buildTime": buildinfo.BuildTime,
+	})
+}
+
+func (s *Server) handleImageBootstrap(w http.ResponseWriter, r *http.Request) {
+	if s == nil || s.store == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "account store is not initialized"})
+		return
+	}
+
+	accountsData, err := s.store.ListAccounts()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	allowDisabled := s.allowDisabledStudioImageAccounts()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"availableQuota":         formatAvailableQuota(accountsData, allowDisabled),
+		"hasAvailablePaidAccount": hasAvailablePaidImageAccount(accountsData, allowDisabled),
 	})
 }
 
@@ -980,7 +1002,7 @@ func (s *Server) requireUIAuth(next http.Handler) http.Handler {
 
 func (s *Server) requireImageAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.hasAnyBearer(r, append([]string{s.cfg.App.AuthKey}, parseKeys(s.cfg.App.APIKey)...)...) {
+		if s.hasAnyBearer(r, append([]string{s.cfg.App.AuthKey, s.cfg.Guest.Password}, parseKeys(s.cfg.App.APIKey)...)...) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -1003,6 +1025,23 @@ func (s *Server) hasAnyBearer(r *http.Request, keys ...string) bool {
 
 func (s *Server) hasExactBearer(r *http.Request, key string) bool {
 	return strings.TrimSpace(key) != "" && bearerFromRequest(r) == strings.TrimSpace(key)
+}
+
+func (s *Server) authRoleForToken(token string) (string, bool) {
+	normalized := strings.TrimSpace(token)
+	if normalized == "" || s == nil || s.cfg == nil {
+		return "", false
+	}
+
+	if key := strings.TrimSpace(s.cfg.App.AuthKey); key != "" && normalized == key {
+		return "admin", true
+	}
+
+	if guestPassword := strings.TrimSpace(s.cfg.Guest.Password); guestPassword != "" && normalized == guestPassword {
+		return "guest", true
+	}
+
+	return "", false
 }
 
 func bearerFromRequest(r *http.Request) string {
@@ -1303,6 +1342,25 @@ func isImageAccountUsable(account accounts.PublicAccount, allowDisabled bool) bo
 		account.Status != "异常" &&
 		account.Status != "限流" &&
 		account.Quota > 0
+}
+
+func formatAvailableQuota(items []accounts.PublicAccount, allowDisabled bool) string {
+	total := 0
+	for _, account := range items {
+		if isImageAccountUsable(account, allowDisabled) {
+			total += max(0, account.Quota)
+		}
+	}
+	return strconv.Itoa(total)
+}
+
+func hasAvailablePaidImageAccount(items []accounts.PublicAccount, allowDisabled bool) bool {
+	for _, account := range items {
+		if isImageAccountUsable(account, allowDisabled) && isPaidImageAccountType(account.Type) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) allowDisabledStudioImageAccounts() bool {

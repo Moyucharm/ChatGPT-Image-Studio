@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { login } from "@/lib/api";
-import { setStoredAuthKey } from "@/store/auth";
+import { setStoredAuthSession } from "@/store/auth";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -18,14 +18,14 @@ export default function LoginPage() {
   const handleLogin = async () => {
     const normalizedAuthKey = authKey.trim();
     if (!normalizedAuthKey) {
-      toast.error("请输入 密钥");
+      toast.error("请输入登录密钥");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await login(normalizedAuthKey);
-      await setStoredAuthKey(normalizedAuthKey);
+      const payload = await login(normalizedAuthKey);
+      await setStoredAuthSession(normalizedAuthKey, payload.role);
       navigate("/image", { replace: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : "登录失败";
@@ -56,7 +56,7 @@ export default function LoginPage() {
                 在一个界面里完成生成、编辑、放大与账号调度。
               </h1>
               <p className="max-w-[430px] text-sm leading-7 text-white/72">
-                登录后直接进入图片工作台。最近任务、选区编辑、额度信息和账号同步都会保持在同一套工作流里。
+                登录后会进入对应工作区。图片工作台、最近任务和选区编辑会保持在同一套工作流里，管理员还可以继续查看账号与配置。
               </p>
             </div>
 
@@ -74,7 +74,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="text-xs text-white/50">进入后默认落在图片工作台，可继续切换到账号管理。</div>
+          <div className="text-xs text-white/50">管理员可进入全部后台，游客只会进入图片工作台。</div>
         </div>
 
         <div className="flex items-center justify-center px-5 py-8 sm:px-8 lg:px-10">
@@ -86,14 +86,14 @@ export default function LoginPage() {
               <div className="space-y-2">
                 <h1 className="text-3xl font-semibold tracking-tight text-stone-950">登录工作区</h1>
                 <p className="text-sm leading-7 text-stone-500">
-                  输入后端密钥，进入图片工作台与账号管理界面。
+                  输入管理员密钥或已配置的游客密码，进入对应工作区。
                 </p>
               </div>
             </div>
 
             <div className="space-y-3">
               <label htmlFor="auth-key" className="block text-sm font-medium text-stone-700">
-                密钥
+                登录密钥 / 游客密码
               </label>
               <Input
                 id="auth-key"
@@ -105,7 +105,7 @@ export default function LoginPage() {
                     void handleLogin();
                   }
                 }}
-                placeholder="请输入密钥"
+                placeholder="请输入管理员密钥或游客密码"
                 className="h-13 rounded-2xl border-stone-200 bg-stone-50 px-4 shadow-none focus-visible:ring-1"
               />
             </div>
@@ -120,7 +120,7 @@ export default function LoginPage() {
             </Button>
 
             <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4 text-xs leading-6 text-stone-500">
-              使用同一个密钥即可访问图片生成接口和后台管理页，不需要额外登录步骤。
+              管理员密钥可访问全部后台；游客密码仅能进入图片工作台。游客密码留空时，游客模式不会启用。
             </div>
 
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-950">

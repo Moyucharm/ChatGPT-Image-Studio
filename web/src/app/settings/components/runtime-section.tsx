@@ -101,8 +101,8 @@ export function RuntimeSection({ config, setSection }: RuntimeSectionProps) {
         />
       </Field>
       <Field
-        label="UI 登录密钥"
-        hint="账号管理、配置管理、调用请求页面使用的 Bearer 密钥。"
+        label="管理员登录密钥"
+        hint="管理员访问账号管理、配置管理、调用请求页面使用的 Bearer 密钥。"
         tooltip={
           <TooltipDetails
             items={[
@@ -112,7 +112,7 @@ export function RuntimeSection({ config, setSection }: RuntimeSectionProps) {
               },
               {
                 title: "作用",
-                body: <>进入管理页面时会校验这个 Bearer 密钥；它保护的是后台管理，不是图片 API。</>,
+                body: <>进入管理页面时会校验这个 Bearer 密钥；它保护的是管理员后台，不是图片 API。</>,
               },
               {
                 title: "改完影响",
@@ -121,11 +121,40 @@ export function RuntimeSection({ config, setSection }: RuntimeSectionProps) {
             ]}
           />
         }
+        >
+          <Input
+            type="password"
+            value={config.app.authKey}
+            onChange={(event) => setSection("app", { ...config.app, authKey: event.target.value })}
+            className="h-11 rounded-2xl border-stone-200 bg-white shadow-none"
+          />
+      </Field>
+      <Field
+        label="游客模式密码"
+        hint="留空时不启用游客模式；填写非空密码后，游客才能进入图片工作台。"
+        tooltip={
+          <TooltipDetails
+            items={[
+              {
+                title: "留空效果",
+                body: <>后端不会放行游客登录；空密码不能登录游客模式。</>,
+              },
+              {
+                title: "作用范围",
+                body: <>游客登录后只能进入图片工作台，不能查看账号管理、配置管理和调用请求页面。</>,
+              },
+              {
+                title: "建议",
+                body: <>如果不需要游客入口，保持空白即可，不会影响管理员登录。</>,
+              },
+            ]}
+          />
+        }
       >
         <Input
           type="password"
-          value={config.app.authKey}
-          onChange={(event) => setSection("app", { ...config.app, authKey: event.target.value })}
+          value={config.guest.password}
+          onChange={(event) => setSection("guest", { ...config.guest, password: event.target.value })}
           className="h-11 rounded-2xl border-stone-200 bg-white shadow-none"
         />
       </Field>

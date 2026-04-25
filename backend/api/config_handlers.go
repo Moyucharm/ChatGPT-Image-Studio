@@ -16,6 +16,9 @@ type configPayload struct {
 		ImageFormat     string `json:"imageFormat"`
 		MaxUploadSizeMB int    `json:"maxUploadSizeMB"`
 	} `json:"app"`
+	Guest struct {
+		Password string `json:"password"`
+	} `json:"guest"`
 	Server struct {
 		Host      string `json:"host"`
 		Port      int    `json:"port"`
@@ -100,6 +103,9 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			"image_format":       payload.App.ImageFormat,
 			"max_upload_size_mb": payload.App.MaxUploadSizeMB,
 		},
+		"guest": {
+			"password": payload.Guest.Password,
+		},
 		"server": {
 			"host":       payload.Server.Host,
 			"port":       payload.Server.Port,
@@ -181,6 +187,8 @@ func (s *Server) buildConfigPayloadFromConfig(cfg *config.Config) configPayload 
 	payload.App.AuthKey = cfg.App.AuthKey
 	payload.App.ImageFormat = cfg.App.ImageFormat
 	payload.App.MaxUploadSizeMB = cfg.App.MaxUploadSizeMB
+
+	payload.Guest.Password = cfg.Guest.Password
 
 	payload.Server.Host = cfg.Server.Host
 	payload.Server.Port = cfg.Server.Port

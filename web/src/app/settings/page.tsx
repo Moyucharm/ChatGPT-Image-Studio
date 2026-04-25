@@ -44,6 +44,9 @@ function defaultConfigPayload(): ConfigPayload {
       imageFormat: "url",
       maxUploadSizeMB: 50,
     },
+    guest: {
+      password: "",
+    },
     server: {
       host: "",
       port: 7000,

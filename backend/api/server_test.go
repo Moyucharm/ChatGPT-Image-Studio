@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -108,6 +109,110 @@ func TestResolveImageUpstreamModelFromConfig(t *testing.T) {
 	}
 	if got := server.resolveImageUpstreamModel("gpt-image-2", "Free"); got != "auto" {
 		t.Fatalf("resolveImageUpstreamModel() = %q, want %q", got, "auto")
+	}
+}
+
+func TestHandleLoginReturnsGuestRoleWhenGuestPasswordMatches(t *testing.T) {
+	server := &Server{
+		cfg: &config.Config{
+			App: config.AppConfig{AuthKey: "admin-key"},
+			Guest: config.GuestConfig{
+				Password: "guest-key",
+			},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
+	req.Header.Set("Authorization", "Bearer guest-key")
+	rec := httptest.NewRecorder()
+
+	server.handleLogin(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	var payload struct {
+		OK      bool   `json:"ok"`
+		Role    string `json:"role"`
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode login response: %v", err)
+	}
+	if !payload.OK {
+		t.Fatal("expected ok=true")
+	}
+	if payload.Role != "guest" {
+		t.Fatalf("role = %q, want guest", payload.Role)
+	}
+}
+
+func TestHandleLoginRejectsGuestWhenPasswordUnset(t *testing.T) {
+	server := &Server{
+		cfg: &config.Config{
+			App: config.AppConfig{AuthKey: "admin-key"},
+			Guest: config.GuestConfig{
+				Password: "",
+			},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
+	req.Header.Set("Authorization", "Bearer guest-key")
+	rec := httptest.NewRecorder()
+
+	server.handleLogin(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestImageAuthAllowsGuestButUIAuthDoesNot(t *testing.T) {
+	server := &Server{
+		cfg: &config.Config{
+			App: config.AppConfig{AuthKey: "admin-key", APIKey: "api-key"},
+			Guest: config.GuestConfig{
+				Password: "guest-key",
+			},
+		},
+	}
+
+	guestReq := httptest.NewRequest(http.MethodGet, "/api/image/bootstrap", nil)
+	guestReq.Header.Set("Authorization", "Bearer guest-key")
+
+	imageRec := httptest.NewRecorder()
+	server.requireImageAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})).ServeHTTP(imageRec, guestReq)
+	if imageRec.Code != http.StatusOK {
+		t.Fatalf("image auth status = %d, body = %s", imageRec.Code, imageRec.Body.String())
+	}
+
+	uiRec := httptest.NewRecorder()
+	server.requireUIAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})).ServeHTTP(uiRec, guestReq)
+	if uiRec.Code != http.StatusUnauthorized {
+		t.Fatalf("ui auth status = %d, body = %s", uiRec.Code, uiRec.Body.String())
+	}
+}
+
+func TestIsImageAccountUsableUsesQuotaInsteadOfLimitsProgress(t *testing.T) {
+	account := accounts.PublicAccount{
+		Status: "正常",
+		Quota:  5,
+		LimitsProgress: []map[string]any{
+			{
+				"feature_name": "image_gen",
+				"remaining":    0,
+			},
+		},
+	}
+
+	if !isImageAccountUsable(account, false) {
+		t.Fatal("expected account to stay usable when quota is positive")
 	}
 }
 

@@ -1,4 +1,5 @@
 import { httpRequest } from "@/lib/request";
+import type { AuthRole } from "@/store/auth";
 
 export type AccountType = "Free" | "Plus" | "Pro" | "Team";
 export type AccountStatus = "正常" | "限流" | "异常" | "禁用";
@@ -149,6 +150,9 @@ export type ConfigPayload = {
     imageFormat: string;
     maxUploadSizeMB: number;
   };
+  guest: {
+    password: string;
+  };
   server: {
     host: string;
     port: number;
@@ -238,9 +242,20 @@ export type VersionInfo = {
   buildTime?: string;
 };
 
+export type ImageBootstrapResponse = {
+  availableQuota: string;
+  hasAvailablePaidAccount: boolean;
+};
+
+type LoginResponse = {
+  ok: boolean;
+  role: AuthRole;
+  version: string;
+};
+
 export async function login(authKey: string) {
   const normalizedAuthKey = String(authKey || "").trim();
-  return httpRequest<{ ok: boolean }>("/auth/login", {
+  return httpRequest<LoginResponse>("/auth/login", {
     method: "POST",
     body: {},
     headers: {
@@ -248,6 +263,10 @@ export async function login(authKey: string) {
     },
     redirectOnUnauthorized: false,
   });
+}
+
+export async function fetchImageBootstrap() {
+  return httpRequest<ImageBootstrapResponse>("/api/image/bootstrap");
 }
 
 export async function fetchAccounts() {

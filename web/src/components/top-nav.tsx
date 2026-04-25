@@ -241,7 +241,6 @@ export function TopNav() {
         </div>
       </header>
       <DesktopTopNav
-        key={isImageRoute ? "image-route" : "non-image-route"}
         pathname={pathname}
         defaultCollapsed={isImageRoute}
         versionLabel={versionLabel}

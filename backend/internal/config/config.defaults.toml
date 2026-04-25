@@ -8,6 +8,10 @@ auth_key = "chatgpt2api"
 image_format = "url"
 max_upload_size_mb = 50
 
+[guest]
+# 留空表示不启用游客模式。
+password = ""
+
 [server]
 host = "0.0.0.0"
 port = 7000
