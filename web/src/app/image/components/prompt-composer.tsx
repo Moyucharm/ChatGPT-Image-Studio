@@ -1,8 +1,8 @@
 "use client";
 
-import type { ClipboardEvent as ReactClipboardEvent, ReactNode, RefObject } from "react";
+import { useRef, useState, type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent, type ReactNode, type RefObject } from "react";
 import Zoom from "react-medium-image-zoom";
-import { ArrowUp, CircleHelp, ImagePlus, LoaderCircle, Trash2, Upload } from "lucide-react";
+import { ArrowUp, CircleHelp, ImagePlus, LoaderCircle, Trash2 } from "lucide-react";
 
 import { AppImage as Image } from "@/components/app-image";
 import { Button } from "@/components/ui/button";
@@ -88,6 +88,8 @@ export function PromptComposer({
   onAppendFiles,
   onSubmit,
 }: PromptComposerProps) {
+  const dragDepthRef = useRef(0);
+  const [isDragActive, setIsDragActive] = useState(false);
   const imageQualityLabel = imageQualityOptions.find((item) => item.value === imageQuality)?.label ?? imageQuality;
   const sizeHintTooltip =
     mode === "generate" && !hasGenerateReferences ? (
@@ -105,15 +107,73 @@ export function PromptComposer({
       </span>
     ) : null;
 
+  const hasImageFiles = (dataTransfer: DataTransfer | null) =>
+    Boolean(dataTransfer && Array.from(dataTransfer.items).some((item) => item.kind === "file" && item.type.startsWith("image/")));
+
+  const handleDragEnter = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (isSubmitting || !hasImageFiles(event.dataTransfer)) {
+      return;
+    }
+    event.preventDefault();
+    dragDepthRef.current += 1;
+    setIsDragActive(true);
+  };
+
+  const handleDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (isSubmitting || !hasImageFiles(event.dataTransfer)) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (!hasImageFiles(event.dataTransfer)) {
+      return;
+    }
+    event.preventDefault();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) {
+      setIsDragActive(false);
+    }
+  };
+
+  const handleDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (isSubmitting || !hasImageFiles(event.dataTransfer)) {
+      return;
+    }
+    event.preventDefault();
+    dragDepthRef.current = 0;
+    setIsDragActive(false);
+    void onAppendFiles(event.dataTransfer.files, "image");
+  };
+
   return (
     <div className="shrink-0 border-t border-stone-200 bg-white px-3 py-3 sm:px-5 sm:py-4">
       <div className="mx-auto flex max-w-[1120px] flex-col gap-3">
         <div
-          className="flex flex-col rounded-xl border border-stone-200 bg-[#fafaf9] shadow-[0_2px_12px_rgba(0,0,0,0.04)] focus-within:border-stone-300 focus-within:ring-1 focus-within:ring-stone-300/50"
+          className={cn(
+            "relative flex flex-col rounded-xl border border-stone-200 bg-[#fafaf9] shadow-[0_2px_12px_rgba(0,0,0,0.04)] focus-within:border-stone-300 focus-within:ring-1 focus-within:ring-stone-300/50",
+            isDragActive && "border-stone-400 ring-2 ring-stone-300/70",
+          )}
           onClick={() => {
             textareaRef.current?.focus();
           }}
+          onDragEnter={handleDragEnter}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
         >
+          {isDragActive ? (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-stone-300 bg-white/88 px-4 text-center backdrop-blur-sm">
+              <div className="space-y-1">
+                <div className="text-sm font-semibold text-stone-900">松手即可添加图片</div>
+                <div className="text-xs text-stone-500">会作为当前模式的源图或参考图加入对话框</div>
+              </div>
+            </div>
+          ) : null}
+
           {sourceImages.length > 0 ? (
             <div className="hide-scrollbar flex gap-3 overflow-x-auto border-b border-stone-100 bg-white/50 px-4 py-3">
               {sourceImages.map((item) => (

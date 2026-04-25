@@ -35,6 +35,10 @@ async function fileToDataUrl(file: File) {
   });
 }
 
+function filterImageFiles(files: File[] | FileList | null) {
+  return (files ? Array.from(files) : []).filter((file) => file.type.startsWith("image/"));
+}
+
 export function useImageSourceInputs({
   mode,
   isSubmitting,
@@ -48,8 +52,14 @@ export function useImageSourceInputs({
   const [editorTarget, setEditorTarget] = useState<EditorTarget | null>(null);
 
   const appendFiles = useCallback(async (files: File[] | FileList | null, role: "image" | "mask") => {
-    const normalizedFiles = files ? Array.from(files) : [];
+    if (isSubmitting) {
+      toast.error("正在处理中，请稍后再添加图片");
+      return;
+    }
+
+    const normalizedFiles = filterImageFiles(files);
     if (normalizedFiles.length === 0) {
+      toast.error("仅支持添加图片文件");
       return;
     }
     const nextItems = await Promise.all(
@@ -75,7 +85,7 @@ export function useImageSourceInputs({
       }
       return [...prev.filter((item) => item.role !== "mask"), ...prev.filter((item) => item.role === "mask"), ...nextItems];
     });
-  }, [makeId, mode]);
+  }, [isSubmitting, makeId, mode]);
 
   const handlePromptPaste = useCallback((event: ReactClipboardEvent<HTMLTextAreaElement>) => {
     if (isSubmitting) {
