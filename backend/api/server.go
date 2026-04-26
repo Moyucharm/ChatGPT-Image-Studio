@@ -141,7 +141,7 @@ func (s *Server) handleImageBootstrap(w http.ResponseWriter, r *http.Request) {
 
 	allowDisabled := s.allowDisabledStudioImageAccounts()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"availableQuota":         formatAvailableQuota(accountsData, allowDisabled),
+		"availableQuota":          formatAvailableQuota(accountsData, allowDisabled),
 		"hasAvailablePaidAccount": hasAvailablePaidImageAccount(accountsData, allowDisabled),
 	})
 }
@@ -466,6 +466,7 @@ func (s *Server) handleImageEdits(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "prompt is required"})
 		return
 	}
+	size := normalizeGenerateImageSize(r.FormValue("size"))
 	requestedModel := normalizeRequestedImageModel(r.FormValue("model"), s.cfg.ChatGPT.Model)
 	responseFormat := firstNonEmpty(r.FormValue("response_format"), s.cfg.App.ImageFormat, "url")
 	mask, err := readOptionalMultipartFile(r.MultipartForm, "mask")
@@ -509,6 +510,7 @@ func (s *Server) handleImageEdits(w http.ResponseWriter, r *http.Request) {
 			Prompt:         prompt,
 			Images:         images,
 			Mask:           mask,
+			Size:           size,
 			ResponseFormat: responseFormat,
 		}, r)
 		if execErr != nil {
@@ -550,7 +552,7 @@ func (s *Server) handleImageUpscale(w http.ResponseWriter, r *http.Request) {
 	responseFormat := firstNonEmpty(r.FormValue("response_format"), s.cfg.App.ImageFormat, "url")
 
 	data, err := s.withImageResultsWithMetadata(r.Context(), "upscale", responseFormat, "", requestedModel, handler.SupportsResponsesInlineEdit([][]byte{images[0]}, nil), newImageRequestMetadata(prompt, "", ""), func(client imageWorkflowClient, upstreamModel string) ([]handler.ImageResult, error) {
-		return client.EditImageByUpload(r.Context(), prompt, upstreamModel, [][]byte{images[0]}, nil)
+		return client.EditImageByUpload(r.Context(), prompt, upstreamModel, [][]byte{images[0]}, nil, "")
 	}, r)
 	if err != nil {
 		writeImageRequestError(w, err)

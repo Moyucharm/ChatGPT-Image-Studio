@@ -429,9 +429,22 @@ func detectImageSize(data []byte) (int, int) {
 	return 0, 0
 }
 
+func buildSizedEditPrompt(prompt, size string) string {
+	normalizedSize := strings.TrimSpace(size)
+	if normalizedSize == "" || normalizedSize == "auto" {
+		return prompt
+	}
+
+	return fmt.Sprintf(
+		"Create the edited output on a %s canvas. Keep the main subject intact, and when needed expand or recompose the background to fit the requested aspect ratio. %s",
+		normalizedSize,
+		prompt,
+	)
+}
+
 // EditImageByUpload uploads images to ChatGPT, then sends an edit conversation.
 // images is a list of image byte slices. mask is optional (nil = no mask).
-func (c *ChatGPTClient) EditImageByUpload(ctx context.Context, prompt, model string, images [][]byte, mask []byte) ([]ImageResult, error) {
+func (c *ChatGPTClient) EditImageByUpload(ctx context.Context, prompt, model string, images [][]byte, mask []byte, size string) ([]ImageResult, error) {
 	if len(images) == 0 {
 		return nil, fmt.Errorf("at least one image is required")
 	}
@@ -457,7 +470,7 @@ func (c *ChatGPTClient) EditImageByUpload(ctx context.Context, prompt, model str
 		}
 	}
 
-	body := c.buildMultimodalBody(prompt, model, uploads, maskUpload)
+	body := c.buildMultimodalBody(buildSizedEditPrompt(prompt, size), model, uploads, maskUpload)
 	return c.doConversation(ctx, body)
 }
 

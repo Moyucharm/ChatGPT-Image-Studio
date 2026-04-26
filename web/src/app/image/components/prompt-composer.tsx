@@ -91,8 +91,10 @@ export function PromptComposer({
   const dragDepthRef = useRef(0);
   const [isDragActive, setIsDragActive] = useState(false);
   const imageQualityLabel = imageQualityOptions.find((item) => item.value === imageQuality)?.label ?? imageQuality;
+  const showCanvasControls = mode !== "upscale";
+  const showGenerateOnlyControls = mode === "generate" && !hasGenerateReferences;
   const sizeHintTooltip =
-    mode === "generate" && !hasGenerateReferences ? (
+    showCanvasControls ? (
       <span className="group relative inline-flex items-center align-middle">
         <span
           tabIndex={0}
@@ -271,7 +273,7 @@ export function PromptComposer({
                 <ImagePlus className="size-4 text-stone-500" />
               </Button>
 
-              {mode === "generate" && !hasGenerateReferences ? (
+              {showCanvasControls ? (
                 <Select value={imageAspectRatio} onValueChange={onImageAspectRatioChange}>
                   <SelectTrigger className="h-8 w-[96px] rounded-lg border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-700 shadow-sm focus-visible:ring-0">
                     <SelectValue />
@@ -286,7 +288,7 @@ export function PromptComposer({
                 </Select>
               ) : null}
 
-              {mode === "generate" && !hasGenerateReferences ? (
+              {showCanvasControls ? (
                 <Select value={imageResolutionTier} onValueChange={onImageResolutionTierChange}>
                   <SelectTrigger
                     className="h-8 w-[160px] rounded-lg border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-700 shadow-sm focus-visible:ring-0"
@@ -306,7 +308,7 @@ export function PromptComposer({
 
               {sizeHintTooltip}
 
-              {mode === "generate" && !hasGenerateReferences ? (
+              {showGenerateOnlyControls ? (
                 <Select value={imageQuality} onValueChange={onImageQualityChange}>
                   <SelectTrigger
                     className="h-8 w-[100px] rounded-lg border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-700 shadow-sm focus-visible:ring-0"
@@ -324,7 +326,7 @@ export function PromptComposer({
                 </Select>
               ) : null}
 
-              {mode === "generate" && !hasGenerateReferences ? (
+              {showGenerateOnlyControls ? (
                 <div className="flex h-8 items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-2 shadow-sm">
                   <span className="text-xs font-medium text-stone-500">张数</span>
                   <Input

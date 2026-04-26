@@ -368,3 +368,43 @@ func TestStudioPaidResolutionUsesPaidAccount(t *testing.T) {
 		t.Fatalf("call sequence = %v, want paid token selected", recorder.callSequence)
 	}
 }
+
+func TestStudioEditPreservesRequestedSize(t *testing.T) {
+	server, recorder := newImageModeCompatTestServer(t, imageModeCompatScenario{
+		imageMode:   "studio",
+		accountType: "Plus",
+		freeRoute:   "legacy",
+		freeModel:   "auto",
+		paidRoute:   "responses",
+		paidModel:   "gpt-5.4-mini",
+	})
+
+	req := newCompatMultipartRequest(t, "/v1/images/edits", map[string]string{
+		"prompt":          "expand this scene",
+		"size":            "1536x1024",
+		"response_format": "b64_json",
+	}, map[string][][]byte{
+		"image": {[]byte("source-image")},
+	}, server.cfg.App.APIKey)
+
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if recorder.lastFactory != "responses" {
+		t.Fatalf("last factory = %q, want %q", recorder.lastFactory, "responses")
+	}
+	if recorder.lastEditSize != "1536x1024" {
+		t.Fatalf("last edit size = %q, want %q", recorder.lastEditSize, "1536x1024")
+	}
+
+	entries := server.reqLogs.list(1)
+	if len(entries) != 1 {
+		t.Fatalf("log entries = %d, want 1", len(entries))
+	}
+	if entries[0].Size != "1536x1024" {
+		t.Fatalf("log size = %q, want %q", entries[0].Size, "1536x1024")
+	}
+}

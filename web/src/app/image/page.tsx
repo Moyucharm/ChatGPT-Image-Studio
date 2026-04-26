@@ -415,15 +415,22 @@ export default function ImagePage() {
     return `${selectedConversationLastTurn.id}:${selectedConversationLastTurn.status}:${imageKey}`;
   }, [selectedConversationLastTurn]);
   const parsedCount = useMemo(() => Math.max(1, Math.min(8, Number(imageCount) || 1)), [imageCount]);
+  const imageSources = useMemo(() => sourceImages.filter((item) => item.role === "image"), [sourceImages]);
+  const maskSource = useMemo(() => sourceImages.find((item) => item.role === "mask") ?? null, [sourceImages]);
+  const hasGenerateReferences = useMemo(() => mode === "generate" && imageSources.length > 0, [imageSources, mode]);
+  const restrictPaidResolutionPresets = mode === "generate" && !hasGenerateReferences;
+  const allowSelectedLargeResolution = hasAvailablePaidAccount || !restrictPaidResolutionPresets;
   const currentResolutionPresets = useMemo(() => imageResolutionPresets[imageAspectRatio], [imageAspectRatio]);
   const imageResolutionTierOptions = useMemo(
     () =>
       currentResolutionPresets.map((item) => ({
-        label: `${item.access === "paid" ? "Paid" : "Free"} ${formatResolutionLabel(item.value)}${item.access === "paid" ? `（${item.label.replace("Paid ", "")}）` : ""}`,
+        label: restrictPaidResolutionPresets
+          ? `${item.access === "paid" ? "Paid" : "Free"} ${formatResolutionLabel(item.value)}${item.access === "paid" ? `（${item.label.replace("Paid ", "")}）` : ""}`
+          : `${formatResolutionLabel(item.value)}${item.tier === "sd" ? "" : `（${item.tier.toUpperCase()}）`}`,
         value: item.tier,
-        disabled: item.access === "paid" && !hasAvailablePaidAccount,
+        disabled: item.access === "paid" && !allowSelectedLargeResolution,
       })),
-    [currentResolutionPresets, hasAvailablePaidAccount],
+    [allowSelectedLargeResolution, currentResolutionPresets, restrictPaidResolutionPresets],
   );
   const imageResolutionTierLabel = useMemo(
     () =>
@@ -435,30 +442,42 @@ export default function ImagePage() {
   const imageSize = useMemo(
     () =>
       currentResolutionPresets.find(
-        (item) => item.tier === imageResolutionTier && (hasAvailablePaidAccount || item.access === "free"),
+        (item) => item.tier === imageResolutionTier && (allowSelectedLargeResolution || item.access === "free"),
       )?.value ??
-      currentResolutionPresets.find((item) => hasAvailablePaidAccount || item.access === "free")?.value ??
+      currentResolutionPresets.find((item) => allowSelectedLargeResolution || item.access === "free")?.value ??
       currentResolutionPresets[0].value,
-    [currentResolutionPresets, hasAvailablePaidAccount, imageResolutionTier],
+    [allowSelectedLargeResolution, currentResolutionPresets, imageResolutionTier],
   );
   const imageSizeHint = useMemo(
     () => (
       <>
-        <div>
-          <span className="font-semibold text-stone-800">分辨率限制：</span>
-          Free 账号当前按约 1.57M 像素总量控制；Paid 账号的图片最长边最高支持 3840。
-        </div>
-        <div className="mt-2">
-          <span className="font-semibold text-stone-800">账号要求：</span>
-          2K 及以上像素档仅 Paid 账号可用，包括 Team / Plus / Pro。
-        </div>
+        {restrictPaidResolutionPresets ? (
+          <>
+            <div>
+              <span className="font-semibold text-stone-800">分辨率限制：</span>
+              当前纯生成链路里，Free 账号通常按约 1.57M 像素总量控制；Paid 账号的图片最长边最高支持 3840。
+            </div>
+            <div className="mt-2">
+              <span className="font-semibold text-stone-800">账号要求：</span>
+              纯生成的 2K 及以上档位仍优先依赖 Paid 账号，所以没有可用 Paid 号时会保持禁用。
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <span className="font-semibold text-stone-800">输出画布：</span>
+              编辑和参考图生成时，上传图只作为输入参考，实际输出比例与分辨率由这里的尺寸决定。
+            </div>
+            <div className="mt-2">
+              <span className="font-semibold text-stone-800">链路差异：</span>
+              Responses / CPA 会直接透传 size；legacy 官方链路会按提示词尽量适配新画布，比例差异过大时可能扩图、补背景或重构构图。
+            </div>
+          </>
+        )}
       </>
     ),
-    [],
+    [restrictPaidResolutionPresets],
   );
-  const imageSources = useMemo(() => sourceImages.filter((item) => item.role === "image"), [sourceImages]);
-  const maskSource = useMemo(() => sourceImages.find((item) => item.role === "mask") ?? null, [sourceImages]);
-  const hasGenerateReferences = useMemo(() => mode === "generate" && imageSources.length > 0, [imageSources, mode]);
   const activeConversationIds = new Set(listActiveImageTasks().map((task) => task.conversationId));
   const processingStatus = useMemo(
     () =>
@@ -526,14 +545,14 @@ export default function ImagePage() {
 
   useEffect(() => {
     const selectedPreset = currentResolutionPresets.find((item) => item.tier === imageResolutionTier);
-    if (selectedPreset && (hasAvailablePaidAccount || selectedPreset.access === "free")) {
+    if (selectedPreset && (allowSelectedLargeResolution || selectedPreset.access === "free")) {
       return;
     }
-    const nextPreset = currentResolutionPresets.find((item) => hasAvailablePaidAccount || item.access === "free");
+    const nextPreset = currentResolutionPresets.find((item) => allowSelectedLargeResolution || item.access === "free");
     if (nextPreset && nextPreset.tier !== imageResolutionTier) {
       setImageResolutionTier(nextPreset.tier);
     }
-  }, [currentResolutionPresets, hasAvailablePaidAccount, imageResolutionTier]);
+  }, [allowSelectedLargeResolution, currentResolutionPresets, imageResolutionTier]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const viewport = resultsViewportRef.current;

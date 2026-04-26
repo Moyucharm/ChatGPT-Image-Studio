@@ -46,6 +46,7 @@ type compatFactoryRecorder struct {
 	cpaCalls       int
 	lastFactory    string
 	lastModel      string
+	lastEditSize   string
 	callSequence   []string
 }
 
@@ -97,11 +98,14 @@ func (c *compatStubWorkflowClient) GenerateImage(ctx context.Context, prompt, mo
 	}, nil
 }
 
-func (c *compatStubWorkflowClient) EditImageByUpload(ctx context.Context, prompt, model string, images [][]byte, mask []byte) ([]handler.ImageResult, error) {
+func (c *compatStubWorkflowClient) EditImageByUpload(ctx context.Context, prompt, model string, images [][]byte, mask []byte, size string) ([]handler.ImageResult, error) {
 	_ = ctx
 	_ = prompt
 	_ = images
 	_ = mask
+	if c.recorder != nil {
+		c.recorder.lastEditSize = size
+	}
 	c.record("edit", model)
 	if c.editErr != nil {
 		return nil, c.editErr

@@ -31,7 +31,7 @@ type ImageWorkflowClient interface {
 	DownloadBytes(url string) ([]byte, error)
 	DownloadAsBase64(ctx context.Context, url string) (string, error)
 	GenerateImage(ctx context.Context, prompt, model string, n int, size, quality, background string) ([]ImageResult, error)
-	EditImageByUpload(ctx context.Context, prompt, model string, images [][]byte, mask []byte) ([]ImageResult, error)
+	EditImageByUpload(ctx context.Context, prompt, model string, images [][]byte, mask []byte, size string) ([]ImageResult, error)
 	InpaintImageByMask(
 		ctx context.Context,
 		prompt string,
@@ -91,14 +91,14 @@ func (c *ResponsesClient) GenerateImage(ctx context.Context, prompt, model strin
 	return c.generateViaResponses(ctx, buildResponsesPrompt(prompt), model, size, quality, background, nil, nil)
 }
 
-func (c *ResponsesClient) EditImageByUpload(ctx context.Context, prompt, model string, images [][]byte, mask []byte) ([]ImageResult, error) {
+func (c *ResponsesClient) EditImageByUpload(ctx context.Context, prompt, model string, images [][]byte, mask []byte, size string) ([]ImageResult, error) {
 	if len(images) == 0 {
 		return nil, fmt.Errorf("at least one image is required")
 	}
 	if !SupportsResponsesInlineEdit(images, mask) {
 		return nil, fmt.Errorf("responses inline edit payload is too large")
 	}
-	return c.generateViaResponses(ctx, buildResponsesEditPrompt(prompt, len(images), len(mask) > 0), model, "", "", "", images, mask)
+	return c.generateViaResponses(ctx, buildResponsesEditPrompt(prompt, len(images), len(mask) > 0), model, size, "", "", images, mask)
 }
 
 func (c *ResponsesClient) InpaintImageByMask(

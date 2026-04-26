@@ -365,7 +365,7 @@ export function useImageSubmit({
           const files = await Promise.all(
             turnImageSources.map((item, index) => dataUrlToFile(item.dataUrl, item.name || `reference-${index + 1}.png`)),
           );
-          const data = await editImage({ prompt, images: files, model: turn.model });
+          const data = await editImage({ prompt, images: files, size: turn.size, model: turn.model });
           resultItems = mergeResultImages(turnId, data.data || [], 1);
         } else {
           const data = await generateImageWithOptions(prompt, {
@@ -383,7 +383,7 @@ export function useImageSubmit({
           turnImageSources.map((item, index) => dataUrlToFile(item.dataUrl, item.name || `image-${index + 1}.png`)),
         );
         const mask = turnMaskSource ? await dataUrlToFile(turnMaskSource.dataUrl, turnMaskSource.name || "mask.png") : null;
-        const data = await editImage({ prompt, images: files, mask, model: turn.model });
+        const data = await editImage({ prompt, images: files, mask, size: turn.size, model: turn.model });
         resultItems = mergeResultImages(turnId, data.data || [], 1);
       }
 
@@ -471,7 +471,7 @@ export function useImageSubmit({
       prompt,
       model: imageModel,
       count: expectedCount,
-      size: mode === "generate" ? imageSize : undefined,
+      size: mode === "generate" || mode === "edit" ? imageSize : undefined,
       quality: mode === "generate" && imageSources.length === 0 ? imageQuality : undefined,
       scale: mode === "upscale" ? upscaleScale : undefined,
       sourceImages,
@@ -519,7 +519,7 @@ export function useImageSubmit({
           const files = await Promise.all(
             imageSources.map((item, index) => dataUrlToFile(item.dataUrl, item.name || `reference-${index + 1}.png`)),
           );
-          const data = await editImage({ prompt, images: files, model: imageModel });
+          const data = await editImage({ prompt, images: files, size: imageSize, model: imageModel });
           resultItems = mergeResultImages(turnId, data.data || [], 1);
         } else {
           const data = await generateImageWithOptions(prompt, {
@@ -537,7 +537,7 @@ export function useImageSubmit({
           imageSources.map((item, index) => dataUrlToFile(item.dataUrl, item.name || `image-${index + 1}.png`)),
         );
         const mask = maskSource ? await dataUrlToFile(maskSource.dataUrl, maskSource.name || "mask.png") : null;
-        const data = await editImage({ prompt, images: files, mask, model: imageModel });
+        const data = await editImage({ prompt, images: files, mask, size: imageSize, model: imageModel });
         resultItems = mergeResultImages(turnId, data.data || [], 1);
       }
 

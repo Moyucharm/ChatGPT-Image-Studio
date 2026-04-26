@@ -395,18 +395,23 @@ export async function editImage({
   images,
   mask,
   sourceReference,
+  size,
   model = "gpt-image-2",
 }: {
   prompt: string;
   images: File[];
   mask?: File | null;
   sourceReference?: InpaintSourceReference;
+  size?: string;
   model?: ImageModel;
 }) {
   const formData = new FormData();
   formData.append("prompt", prompt);
   formData.append("model", model);
   formData.append("response_format", "b64_json");
+  if (size?.trim()) {
+    formData.append("size", size.trim());
+  }
   images.forEach((file) => formData.append("image", file));
   if (mask) {
     formData.append("mask", mask);

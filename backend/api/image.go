@@ -89,6 +89,7 @@ func handleImageEdits() http.HandlerFunc {
 		if responseFormat == "" {
 			responseFormat = "url"
 		}
+		size := strings.TrimSpace(r.FormValue("size"))
 		requestedModel := strings.TrimSpace(r.FormValue("model"))
 		if requestedModel == "" {
 			requestedModel = "gpt-image-2"
@@ -156,7 +157,7 @@ func handleImageEdits() http.HandlerFunc {
 		}
 
 		client := handler.NewChatGPTClient(tokenStr, "")
-		results, err := client.EditImageByUpload(r.Context(), prompt, upstreamModel, imageDataList, maskData)
+		results, err := client.EditImageByUpload(r.Context(), prompt, upstreamModel, imageDataList, maskData, size)
 		if err != nil {
 			tokenMgr.RecordFail(tokenStr, err.Error())
 			tokenMgr.Save()

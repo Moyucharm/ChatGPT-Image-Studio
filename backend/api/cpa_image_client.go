@@ -142,12 +142,12 @@ func (c *cpaImageClient) GenerateImage(ctx context.Context, prompt, model string
 	return results, err
 }
 
-func (c *cpaImageClient) EditImageByUpload(ctx context.Context, prompt, model string, images [][]byte, mask []byte) ([]handler.ImageResult, error) {
+func (c *cpaImageClient) EditImageByUpload(ctx context.Context, prompt, model string, images [][]byte, mask []byte, size string) ([]handler.ImageResult, error) {
 	if len(images) == 0 {
 		return nil, fmt.Errorf("at least one image is required")
 	}
 	if c.shouldUseResponsesRoute() {
-		return c.editViaResponses(ctx, prompt, images, mask)
+		return c.editViaResponses(ctx, prompt, images, mask, size)
 	}
 
 	var payload bytes.Buffer
@@ -155,6 +155,9 @@ func (c *cpaImageClient) EditImageByUpload(ctx context.Context, prompt, model st
 	_ = writer.WriteField("prompt", strings.TrimSpace(prompt))
 	_ = writer.WriteField("model", strings.TrimSpace(model))
 	_ = writer.WriteField("response_format", "b64_json")
+	if trimmedSize := strings.TrimSpace(size); trimmedSize != "" {
+		_ = writer.WriteField("size", trimmedSize)
+	}
 
 	for index, image := range images {
 		part, err := writer.CreateFormFile("image", fmt.Sprintf("image-%d.png", index+1))
@@ -193,7 +196,7 @@ func (c *cpaImageClient) EditImageByUpload(ctx context.Context, prompt, model st
 	c.setLastRoute("images_api")
 	results, parseErr := c.parseImageAPIResponse(resp)
 	if parseErr != nil && c.shouldFallbackToResponses(parseErr) {
-		fallbackResults, fallbackErr := c.editViaResponses(ctx, prompt, images, mask)
+		fallbackResults, fallbackErr := c.editViaResponses(ctx, prompt, images, mask, size)
 		if fallbackErr == nil {
 			return fallbackResults, nil
 		}
@@ -397,8 +400,8 @@ func (c *cpaImageClient) generateViaResponses(ctx context.Context, prompt, size,
 	return c.executeResponsesRequest(ctx, payload)
 }
 
-func (c *cpaImageClient) editViaResponses(ctx context.Context, prompt string, images [][]byte, mask []byte) ([]handler.ImageResult, error) {
-	payload := c.buildResponsesRequest(prompt, images, mask, "", "", "")
+func (c *cpaImageClient) editViaResponses(ctx context.Context, prompt string, images [][]byte, mask []byte, size string) ([]handler.ImageResult, error) {
+	payload := c.buildResponsesRequest(prompt, images, mask, size, "", "")
 	return c.executeResponsesRequest(ctx, payload)
 }
 

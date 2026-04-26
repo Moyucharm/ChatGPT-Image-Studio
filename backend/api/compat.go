@@ -33,6 +33,7 @@ type imageEditRequest struct {
 	Prompt         string
 	Images         [][]byte
 	Mask           []byte
+	Size           string
 	ResponseFormat string
 }
 
@@ -158,8 +159,9 @@ func (s *Server) executeImageEdit(ctx context.Context, req imageEditRequest, r *
 
 	requestedModel := normalizeRequestedImageModel(req.Model, s.cfg.ChatGPT.Model)
 	responseFormat := firstNonEmpty(req.ResponseFormat, s.cfg.App.ImageFormat, "url")
-	data, err := s.withImageResultsWithMetadata(ctx, "edit", responseFormat, "", requestedModel, handler.SupportsResponsesInlineEdit(req.Images, req.Mask), newImageRequestMetadata(prompt, "", ""), func(client imageWorkflowClient, upstreamModel string) ([]handler.ImageResult, error) {
-		return client.EditImageByUpload(ctx, prompt, upstreamModel, req.Images, req.Mask)
+	size := normalizeGenerateImageSize(req.Size)
+	data, err := s.withImageResultsWithMetadata(ctx, "edit", responseFormat, "", requestedModel, handler.SupportsResponsesInlineEdit(req.Images, req.Mask), newImageRequestMetadata(prompt, size, ""), func(client imageWorkflowClient, upstreamModel string) ([]handler.ImageResult, error) {
+		return client.EditImageByUpload(ctx, prompt, upstreamModel, req.Images, req.Mask, size)
 	}, r)
 	if err != nil {
 		return nil, err
@@ -280,6 +282,7 @@ func (s *Server) runCompatImageRequest(ctx context.Context, r *http.Request, req
 		Model:          req.RequestedModel,
 		Prompt:         req.Prompt,
 		Images:         images,
+		Size:           req.Size,
 		ResponseFormat: "b64_json",
 	}, r)
 }
