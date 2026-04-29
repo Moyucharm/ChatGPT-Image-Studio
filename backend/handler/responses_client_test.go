@@ -58,6 +58,53 @@ func TestParseResponsesSSEDeduplicatesFinalImages(t *testing.T) {
 	}
 }
 
+func TestParseResponsesJSONPayloadExtractsImageOutput(t *testing.T) {
+	raw := []byte(`{"id":"resp-1","status":"completed","output":[{"type":"image_generation_call","result":"aGVsbG8=","output_format":"png"}]}`)
+
+	images, responseID, status, responseErr, err := parseResponsesJSONPayload(raw, "prompt")
+	if err != nil {
+		t.Fatalf("parseResponsesJSONPayload() returned error: %v", err)
+	}
+	if responseID != "resp-1" {
+		t.Fatalf("response id = %q, want %q", responseID, "resp-1")
+	}
+	if status != "completed" {
+		t.Fatalf("status = %q, want %q", status, "completed")
+	}
+	if responseErr != "" {
+		t.Fatalf("response error = %q, want empty", responseErr)
+	}
+	if len(images) != 1 {
+		t.Fatalf("images len = %d, want 1", len(images))
+	}
+	if got, want := images[0].URL, "data:image/png;base64,aGVsbG8="; got != want {
+		t.Fatalf("image url = %q, want %q", got, want)
+	}
+}
+
+func TestShouldUseBackgroundResponsesForLargeHighQualityRequests(t *testing.T) {
+	tests := []struct {
+		name    string
+		size    string
+		quality string
+		want    bool
+	}{
+		{name: "4k medium uses background", size: "3840x2160", quality: "medium", want: true},
+		{name: "2k high uses background", size: "2560x1440", quality: "high", want: true},
+		{name: "2k medium stays streaming", size: "2560x1440", quality: "medium", want: false},
+		{name: "small high stays streaming", size: "1024x1024", quality: "high", want: false},
+		{name: "auto stays streaming", size: "auto", quality: "high", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldUseBackgroundResponses(tt.size, tt.quality); got != tt.want {
+				t.Fatalf("shouldUseBackgroundResponses(%q, %q) = %v, want %v", tt.size, tt.quality, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseResponsesSSEAcceptsLargeImageEvents(t *testing.T) {
 	largeB64 := strings.Repeat("A", 10*1024*1024+4096)
 	stream := `data: {"type":"response.completed","response":{"output":[{"type":"image_generation_call","result":"` + largeB64 + `","output_format":"png"}]}}` + "\n\n"

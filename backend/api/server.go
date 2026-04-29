@@ -30,6 +30,7 @@ type Server struct {
 	syncClient             *cliproxy.Client
 	staticDir              string
 	reqLogs                *imageRequestLogStore
+	imageTasks             *imageTaskStore
 	officialClientFactory  func(accessToken, proxyURL string, authData map[string]any, requestConfig handler.ImageRequestConfig) imageWorkflowClient
 	responsesClientFactory func(accessToken, proxyURL string, authData map[string]any, requestConfig handler.ImageRequestConfig) imageWorkflowClient
 	cpaClientFactory       func(baseURL, apiKey string, timeout time.Duration, routeStrategy string) cpaRouteAwareImageWorkflowClient
@@ -53,6 +54,7 @@ func NewServer(cfg *config.Config, store *accounts.Store, syncClient *cliproxy.C
 		syncClient: syncClient,
 		staticDir:  cfg.ResolvePath(cfg.Server.StaticDir),
 		reqLogs:    newImageRequestLogStore(),
+		imageTasks: newImageTaskStore(2),
 		officialClientFactory: func(accessToken, proxyURL string, authData map[string]any, requestConfig handler.ImageRequestConfig) imageWorkflowClient {
 			return handler.NewChatGPTClientWithProxyAndConfig(
 				accessToken,
@@ -88,6 +90,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/config/defaults", s.requireUIAuth(http.HandlerFunc(s.handleGetDefaultConfig)))
 	mux.Handle("PUT /api/config", s.requireUIAuth(http.HandlerFunc(s.handleUpdateConfig)))
 	mux.Handle("GET /api/requests", s.requireUIAuth(http.HandlerFunc(s.handleListRequestLogs)))
+	mux.Handle("POST /api/image/tasks/generations", s.requireImageAuth(http.HandlerFunc(s.handleCreateImageGenerationTask)))
+	mux.Handle("GET /api/image/tasks/{id}", s.requireImageAuth(http.HandlerFunc(s.handleGetImageTask)))
 	mux.Handle("GET /api/sync/status", s.requireUIAuth(http.HandlerFunc(s.handleSyncStatus)))
 	mux.Handle("POST /api/sync/run", s.requireUIAuth(http.HandlerFunc(s.handleRunSync)))
 

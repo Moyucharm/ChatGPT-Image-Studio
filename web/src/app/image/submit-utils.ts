@@ -138,6 +138,17 @@ export function formatImageErrorMessage(message: string) {
     return "图片生成等待超时，建议稍后重试或增加超时时间，或降低分辨率/质量。";
   }
 
+  if (
+    normalized.includes("524") ||
+    normalized.includes("context deadline exceeded") ||
+    normalized.includes("client.timeout exceeded") ||
+    normalized.includes("timeout awaiting response") ||
+    normalized.includes("responses background timed out") ||
+    normalized.includes("图片生成任务等待超时")
+  ) {
+    return "官方图片生成等待超时。4K + High 可能超过上游处理时间，建议稍后重试，或先使用 4K Medium / 2K High。";
+  }
+
   return trimmed;
 }
 

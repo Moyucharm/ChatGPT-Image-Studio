@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -88,7 +89,17 @@ func (c *ResponsesClient) DownloadAsBase64(ctx context.Context, url string) (str
 }
 
 func (c *ResponsesClient) GenerateImage(ctx context.Context, prompt, model string, n int, size, quality, background string) ([]ImageResult, error) {
-	return c.generateViaResponses(ctx, buildResponsesPrompt(prompt), model, size, quality, background, nil, nil)
+	prompt = buildResponsesPrompt(prompt)
+	if shouldUseBackgroundResponses(size, quality) {
+		images, err := c.generateViaBackgroundResponses(ctx, prompt, model, size, quality, background, nil, nil)
+		if err == nil {
+			return images, nil
+		}
+		if !shouldFallbackFromResponsesBackground(err) {
+			return nil, err
+		}
+	}
+	return c.generateViaResponses(ctx, prompt, model, size, quality, background, nil, nil)
 }
 
 func (c *ResponsesClient) EditImageByUpload(ctx context.Context, prompt, model string, images [][]byte, mask []byte, size string) ([]ImageResult, error) {
@@ -115,6 +126,39 @@ func (c *ResponsesClient) InpaintImageByMask(
 }
 
 func (c *ResponsesClient) generateViaResponses(ctx context.Context, prompt, model string, size, quality, background string, images [][]byte, mask []byte) ([]ImageResult, error) {
+	payload, err := c.buildResponsesPayload(prompt, model, size, quality, background, images, mask)
+	if err != nil {
+		return nil, err
+	}
+	payload["stream"] = true
+	payload["store"] = false
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal responses payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, codexResponsesBaseURL+"/responses", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create responses request: %w", err)
+	}
+	c.setResponsesHeaders(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("responses request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		return nil, fmt.Errorf("responses returned %d: %s", resp.StatusCode, summarizeResponsesError(respBody))
+	}
+
+	return c.parseResponsesSSE(resp.Body, prompt)
+}
+
+func (c *ResponsesClient) buildResponsesPayload(prompt, model string, size, quality, background string, images [][]byte, mask []byte) (map[string]any, error) {
 	if c == nil || c.backend == nil {
 		return nil, fmt.Errorf("responses client is not initialized")
 	}
@@ -158,41 +202,145 @@ func (c *ResponsesClient) generateViaResponses(ctx context.Context, prompt, mode
 			"image_url": encodeImageDataURL(image, detectMIME(image)),
 		})
 	}
-	payload := map[string]any{
+	return map[string]any{
 		"model":               model,
 		"input":               []any{map[string]any{"role": "user", "content": content}},
 		"tools":               []any{tool},
 		"tool_choice":         map[string]any{"type": "image_generation"},
 		"instructions":        "You generate and edit images for the user.",
-		"stream":              true,
-		"store":               false,
 		"parallel_tool_calls": true,
 		"include":             []string{"reasoning.encrypted_content"},
+	}, nil
+}
+
+type responsesBackgroundFallbackError struct {
+	err error
+}
+
+func (e *responsesBackgroundFallbackError) Error() string {
+	if e == nil || e.err == nil {
+		return "responses background is unavailable"
+	}
+	return e.err.Error()
+}
+
+func (e *responsesBackgroundFallbackError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.err
+}
+
+func shouldFallbackFromResponsesBackground(err error) bool {
+	var fallbackErr *responsesBackgroundFallbackError
+	return errors.As(err, &fallbackErr)
+}
+
+func newResponsesBackgroundFallbackError(format string, args ...any) error {
+	return &responsesBackgroundFallbackError{err: fmt.Errorf(format, args...)}
+}
+
+func (c *ResponsesClient) generateViaBackgroundResponses(ctx context.Context, prompt, model string, size, quality, background string, images [][]byte, mask []byte) ([]ImageResult, error) {
+	payload, err := c.buildResponsesPayload(prompt, model, size, quality, background, images, mask)
+	if err != nil {
+		return nil, err
+	}
+	payload["background"] = true
+	payload["store"] = true
+	payload["stream"] = false
+
+	raw, statusCode, err := c.executeResponsesJSON(ctx, http.MethodPost, "/responses", payload)
+	if err != nil {
+		return nil, err
+	}
+	if statusCode == http.StatusBadRequest || statusCode == http.StatusNotFound || statusCode == http.StatusMethodNotAllowed || statusCode == http.StatusUnprocessableEntity {
+		return nil, newResponsesBackgroundFallbackError("responses background returned %d: %s", statusCode, summarizeResponsesError(raw))
+	}
+	if statusCode < 200 || statusCode >= 300 {
+		return nil, fmt.Errorf("responses background returned %d: %s", statusCode, summarizeResponsesError(raw))
 	}
 
-	body, err := json.Marshal(payload)
+	imagesOut, responseID, responseStatus, responseErr, err := parseResponsesJSONPayload(raw, prompt)
 	if err != nil {
-		return nil, fmt.Errorf("marshal responses payload: %w", err)
+		return nil, newResponsesBackgroundFallbackError("parse responses background payload: %w", err)
+	}
+	if responseErr != "" {
+		return nil, fmt.Errorf("responses background failed: %s", responseErr)
+	}
+	if len(imagesOut) > 0 {
+		return imagesOut, nil
+	}
+	if responseID == "" {
+		return nil, newResponsesBackgroundFallbackError("responses background did not return response id")
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, codexResponsesBaseURL+"/responses", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("create responses request: %w", err)
+	deadline := time.Now().Add(c.backgroundPollMaxWait())
+	for {
+		if isResponsesBackgroundTerminal(responseStatus) {
+			break
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("responses background timed out waiting for image output")
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(c.backgroundPollInterval()):
+		}
+
+		raw, statusCode, err = c.executeResponsesJSON(ctx, http.MethodGet, "/responses/"+responseID, nil)
+		if err != nil {
+			return nil, err
+		}
+		if statusCode == http.StatusNotFound || statusCode == http.StatusMethodNotAllowed {
+			return nil, fmt.Errorf("responses background polling returned %d", statusCode)
+		}
+		if statusCode < 200 || statusCode >= 300 {
+			return nil, fmt.Errorf("responses background polling returned %d: %s", statusCode, summarizeResponsesError(raw))
+		}
+
+		imagesOut, _, responseStatus, responseErr, err = parseResponsesJSONPayload(raw, prompt)
+		if err != nil {
+			return nil, fmt.Errorf("parse responses background polling payload: %w", err)
+		}
+		if responseErr != "" {
+			return nil, fmt.Errorf("responses background failed: %s", responseErr)
+		}
+		if len(imagesOut) > 0 {
+			return imagesOut, nil
+		}
 	}
-	c.setResponsesHeaders(req)
+
+	return nil, fmt.Errorf("responses background completed without image output")
+}
+
+func (c *ResponsesClient) executeResponsesJSON(ctx context.Context, method, path string, payload map[string]any) ([]byte, int, error) {
+	var body io.Reader
+	if payload != nil {
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return nil, 0, fmt.Errorf("marshal responses JSON payload: %w", err)
+		}
+		body = bytes.NewReader(raw)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, codexResponsesBaseURL+path, body)
+	if err != nil {
+		return nil, 0, fmt.Errorf("create responses JSON request: %w", err)
+	}
+	c.setResponsesJSONHeaders(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("responses request: %w", err)
+		return nil, 0, fmt.Errorf("responses JSON request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		return nil, fmt.Errorf("responses returned %d: %s", resp.StatusCode, summarizeResponsesError(respBody))
+	raw, readErr := io.ReadAll(io.LimitReader(resp.Body, maxResponsesSSELineBytes))
+	if readErr != nil {
+		return nil, resp.StatusCode, fmt.Errorf("read responses JSON body: %w", readErr)
 	}
-
-	return c.parseResponsesSSE(resp.Body, prompt)
+	return raw, resp.StatusCode, nil
 }
 
 func buildResponsesImageGenerationTool(size, quality, background string) (map[string]any, error) {
@@ -358,6 +506,130 @@ func (c *ResponsesClient) parseResponsesSSE(reader io.Reader, prompt string) ([]
 	return finalImages, nil
 }
 
+func parseResponsesJSONPayload(raw []byte, prompt string) ([]ImageResult, string, string, string, error) {
+	var payload struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+		Error  *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+		Output []struct {
+			Type         string `json:"type"`
+			Result       string `json:"result"`
+			OutputFormat string `json:"output_format"`
+		} `json:"output"`
+		Response *struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+			Error  *struct {
+				Message string `json:"message"`
+			} `json:"error"`
+			Output []struct {
+				Type         string `json:"type"`
+				Result       string `json:"result"`
+				OutputFormat string `json:"output_format"`
+			} `json:"output"`
+		} `json:"response"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, "", "", "", err
+	}
+
+	responseID := strings.TrimSpace(payload.ID)
+	status := strings.TrimSpace(payload.Status)
+	errorMessage := ""
+	if payload.Error != nil {
+		errorMessage = strings.TrimSpace(payload.Error.Message)
+	}
+	output := payload.Output
+	if payload.Response != nil {
+		if responseID == "" {
+			responseID = strings.TrimSpace(payload.Response.ID)
+		}
+		if status == "" {
+			status = strings.TrimSpace(payload.Response.Status)
+		}
+		if errorMessage == "" && payload.Response.Error != nil {
+			errorMessage = strings.TrimSpace(payload.Response.Error.Message)
+		}
+		if len(output) == 0 {
+			output = payload.Response.Output
+		}
+	}
+
+	images := make([]ImageResult, 0)
+	seen := make(map[[32]byte]struct{})
+	for _, item := range output {
+		if item.Type != "image_generation_call" || strings.TrimSpace(item.Result) == "" {
+			continue
+		}
+		hash := sha256.Sum256([]byte(item.Result))
+		if _, ok := seen[hash]; ok {
+			continue
+		}
+		seen[hash] = struct{}{}
+		images = append(images, ImageResult{
+			URL:           encodeImageDataURLFromBase64(item.Result, mimeTypeFromOutputFormat(item.OutputFormat)),
+			RevisedPrompt: prompt,
+		})
+	}
+	return images, responseID, status, errorMessage, nil
+}
+
+func isResponsesBackgroundTerminal(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "", "queued", "in_progress", "running":
+		return false
+	default:
+		return true
+	}
+}
+
+func shouldUseBackgroundResponses(size, quality string) bool {
+	pixels := responsesSizePixels(size)
+	if pixels <= 0 {
+		return false
+	}
+	if pixels >= 3840*2160 {
+		return true
+	}
+	return pixels >= 2560*1440 && strings.EqualFold(strings.TrimSpace(quality), "high")
+}
+
+func responsesSizePixels(size string) int {
+	normalized := imaging.NormalizeGenerateSize(size)
+	if normalized == "" {
+		return 0
+	}
+	widthRaw, heightRaw, ok := strings.Cut(normalized, "x")
+	if !ok {
+		return 0
+	}
+	width, err := strconv.Atoi(widthRaw)
+	if err != nil || width <= 0 {
+		return 0
+	}
+	height, err := strconv.Atoi(heightRaw)
+	if err != nil || height <= 0 {
+		return 0
+	}
+	return width * height
+}
+
+func (c *ResponsesClient) backgroundPollInterval() time.Duration {
+	if c == nil || c.backend == nil || c.backend.pollInterval <= 0 {
+		return defaultPollInterval
+	}
+	return c.backend.pollInterval
+}
+
+func (c *ResponsesClient) backgroundPollMaxWait() time.Duration {
+	if c == nil || c.backend == nil || c.backend.pollMaxWait <= 0 {
+		return defaultPollMaxWait
+	}
+	return c.backend.pollMaxWait
+}
+
 func (c *ResponsesClient) setResponsesHeaders(req *http.Request) {
 	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(c.backend.accessToken))
 	req.Header.Set("Chatgpt-Account-Id", c.accountID)
@@ -367,6 +639,11 @@ func (c *ResponsesClient) setResponsesHeaders(req *http.Request) {
 	req.Header.Set("Originator", codexResponsesOriginator)
 	req.Header.Set("Session_id", uuid.NewString())
 	req.Header.Set("Connection", "Keep-Alive")
+}
+
+func (c *ResponsesClient) setResponsesJSONHeaders(req *http.Request) {
+	c.setResponsesHeaders(req)
+	req.Header.Set("Accept", "application/json")
 }
 
 func buildResponsesPrompt(prompt string) string {

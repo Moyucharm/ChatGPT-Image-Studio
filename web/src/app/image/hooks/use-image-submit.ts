@@ -4,8 +4,9 @@ import { useCallback } from "react";
 import { toast } from "sonner";
 
 import {
+  createImageGenerationTask,
   editImage,
-  generateImageWithOptions,
+  fetchImageGenerationTask,
   upscaleImage,
   type ImageModel,
   type ImageQuality,
@@ -42,6 +43,43 @@ type ActiveRequestState = {
   count: number;
   variant: "standard" | "selection-edit";
 };
+
+const imageGenerationTaskPollIntervalMs = 2500;
+const imageGenerationTaskMaxWaitMs = 15 * 60 * 1000;
+
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function generateImageViaTask(
+  prompt: string,
+  options: {
+    model: ImageModel;
+    count: number;
+    size?: string;
+    quality: ImageQuality;
+  },
+) {
+  const created = await createImageGenerationTask(prompt, options);
+  let task = created.task;
+  const startedAt = Date.now();
+
+  while (task.status === "queued" || task.status === "running") {
+    if (Date.now() - startedAt > imageGenerationTaskMaxWaitMs) {
+      throw new Error("图片生成任务等待超时，请稍后在历史记录中查看或降低分辨率后重试");
+    }
+    await wait(imageGenerationTaskPollIntervalMs);
+    task = (await fetchImageGenerationTask(task.id)).task;
+  }
+
+  if (task.status === "failed") {
+    throw new Error(task.error || "图片生成失败");
+  }
+  if (!task.result) {
+    throw new Error("图片生成任务没有返回结果");
+  }
+  return task.result;
+}
 
 type UseImageSubmitOptions = {
   mode: ImageMode;
@@ -368,7 +406,7 @@ export function useImageSubmit({
           const data = await editImage({ prompt, images: files, size: turn.size, model: turn.model });
           resultItems = mergeResultImages(turnId, data.data || [], 1);
         } else {
-          const data = await generateImageWithOptions(prompt, {
+          const data = await generateImageViaTask(prompt, {
             model: turn.model,
             count: expectedCount,
             size: turn.size,
@@ -522,7 +560,7 @@ export function useImageSubmit({
           const data = await editImage({ prompt, images: files, size: imageSize, model: imageModel });
           resultItems = mergeResultImages(turnId, data.data || [], 1);
         } else {
-          const data = await generateImageWithOptions(prompt, {
+          const data = await generateImageViaTask(prompt, {
             model: imageModel,
             count: parsedCount,
             size: imageSize,

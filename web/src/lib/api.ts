@@ -141,6 +141,21 @@ type ImageResponse = {
   data: ImageResponseItem[];
 };
 
+export type ImageGenerationTask = {
+  id: string;
+  status: "queued" | "running" | "succeeded" | "failed";
+  createdAt: string;
+  updatedAt: string;
+  finishedAt?: string;
+  result?: ImageResponse;
+  error?: string;
+  code?: string;
+};
+
+type ImageGenerationTaskResponse = {
+  task: ImageGenerationTask;
+};
+
 export type ConfigPayload = {
   app: {
     name: string;
@@ -388,6 +403,33 @@ export async function generateImageWithOptions(
       response_format: "b64_json",
     },
   });
+}
+
+export async function createImageGenerationTask(
+  prompt: string,
+  options: {
+    model?: ImageModel;
+    count?: number;
+    size?: string;
+    quality?: ImageQuality;
+  } = {},
+) {
+  const { model = "gpt-image-2", count = 1, size, quality = "high" } = options;
+  return httpRequest<ImageGenerationTaskResponse>("/api/image/tasks/generations", {
+    method: "POST",
+    body: {
+      prompt,
+      model,
+      n: Math.max(1, count),
+      size: size?.trim() || undefined,
+      quality,
+      response_format: "b64_json",
+    },
+  });
+}
+
+export async function fetchImageGenerationTask(taskId: string) {
+  return httpRequest<ImageGenerationTaskResponse>(`/api/image/tasks/${encodeURIComponent(taskId)}`);
 }
 
 export async function editImage({
