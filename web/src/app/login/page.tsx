@@ -44,14 +44,20 @@ export default function LoginPage() {
               <Sparkles className="size-4" />
             </span>
             <div>
-              <div className="text-sm font-semibold tracking-tight">ChatGpt Image Studio</div>
-              <div className="mt-1 text-xs text-white/65">轻量、克制、连续处理的图片工作区</div>
+              <div className="text-sm font-semibold tracking-tight">
+                ChatGPT Image Studio
+              </div>
+              <div className="mt-1 text-xs text-white/65">
+                轻量、克制、连续处理的图片工作区
+              </div>
             </div>
           </div>
 
           <div className="space-y-6">
             <div className="space-y-3">
-              <div className="text-sm font-medium uppercase tracking-[0.24em] text-white/55">Image Studio</div>
+              <div className="text-sm font-medium uppercase tracking-[0.24em] text-white/55">
+                Image Studio
+              </div>
               <h1 className="max-w-[420px] text-[40px] font-semibold leading-[1.1] tracking-tight">
                 在一个界面里完成生成、编辑、放大与账号调度。
               </h1>
@@ -66,15 +72,22 @@ export default function LoginPage() {
                 ["编辑", "继续改图，保留上下文"],
                 ["管理", "查看额度与同步状态"],
               ].map(([title, desc]) => (
-                <div key={title} className="rounded-2xl border border-white/12 bg-white/6 p-4 backdrop-blur-sm">
+                <div
+                  key={title}
+                  className="rounded-2xl border border-white/12 bg-white/6 p-4 backdrop-blur-sm"
+                >
                   <div className="text-sm font-semibold">{title}</div>
-                  <div className="mt-2 text-xs leading-6 text-white/65">{desc}</div>
+                  <div className="mt-2 text-xs leading-6 text-white/65">
+                    {desc}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="text-xs text-white/50">管理员可进入全部后台，游客只会进入图片工作台。</div>
+          <div className="text-xs text-white/50">
+            管理员可进入全部后台，游客只会进入图片工作台。
+          </div>
         </div>
 
         <div className="flex items-center justify-center px-5 py-8 sm:px-8 lg:px-10">
@@ -84,7 +97,9 @@ export default function LoginPage() {
                 <LockKeyhole className="size-5" />
               </div>
               <div className="space-y-2">
-                <h1 className="text-3xl font-semibold tracking-tight text-stone-950">登录工作区</h1>
+                <h1 className="text-3xl font-semibold tracking-tight text-stone-950">
+                  登录工作区
+                </h1>
                 <p className="text-sm leading-7 text-stone-500">
                   输入管理员密钥或已配置的游客密码，进入对应工作区。
                 </p>
@@ -92,7 +107,10 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-3">
-              <label htmlFor="auth-key" className="block text-sm font-medium text-stone-700">
+              <label
+                htmlFor="auth-key"
+                className="block text-sm font-medium text-stone-700"
+              >
                 登录密钥 / 游客密码
               </label>
               <Input
@@ -115,7 +133,9 @@ export default function LoginPage() {
               onClick={() => void handleLogin()}
               disabled={isSubmitting}
             >
-              {isSubmitting ? <LoaderCircle className="size-4 animate-spin" /> : null}
+              {isSubmitting ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : null}
               进入工作区
             </Button>
 
@@ -132,7 +152,8 @@ export default function LoginPage() {
                 本项目仅供个人学习、技术研究与非商业交流使用，严禁用于违法违规、批量滥用或其他不当用途。
               </div>
               <div className="mt-1">
-                项目基于对 ChatGPT 官网相关能力的研究实现，存在账号被限制、临时封禁或永久封禁的风险。请勿使用常用、大号或高价值账号测试。
+                项目基于对 ChatGPT
+                官网相关能力的研究实现，存在账号被限制、临时封禁或永久封禁的风险。请勿使用常用、大号或高价值账号测试。
               </div>
             </div>
           </div>

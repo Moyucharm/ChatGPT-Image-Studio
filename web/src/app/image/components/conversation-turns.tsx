@@ -224,7 +224,7 @@ export function ConversationTurns({
                 </span>
                 <div>
                   <div className="text-sm font-semibold tracking-tight text-stone-900">
-                    ChatGpt Image Studio
+                    ChatGPT Image Studio
                   </div>
                 </div>
               </div>
