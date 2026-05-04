@@ -44,6 +44,9 @@ paid_image_route = "responses"
 # 默认 gpt-5.4-mini，也可以改成 gpt-5.4。
 paid_image_model = "gpt-5.4-mini"
 
+# 官方 codex responses 链路的 instructions。留空时使用程序默认值。
+responses_instructions = "You generate and edit images for the user."
+
 # Studio 模式下，是否允许“已禁用但仍有图片额度”的账号继续参与图片生成。
 # 仅对 Studio 模式生效；CPA 不受影响。
 studio_allow_disabled_image_accounts = false

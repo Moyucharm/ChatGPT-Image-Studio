@@ -63,6 +63,7 @@ function defaultConfigPayload(): ConfigPayload {
       freeImageModel: "auto",
       paidImageRoute: "responses",
       paidImageModel: "gpt-5.4-mini",
+      responsesInstructions: "You generate and edit images for the user.",
       studioAllowDisabledImageAccounts: false,
     },
     accounts: {

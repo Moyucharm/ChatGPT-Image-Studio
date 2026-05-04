@@ -238,6 +238,34 @@ func TestNormalizeResponsesImageToolModel(t *testing.T) {
 	}
 }
 
+func TestBuildResponsesPayloadUsesConfiguredInstructions(t *testing.T) {
+	client := NewResponsesClientWithProxyAndConfig("token", "", map[string]any{
+		"account_id": "acct-1",
+	}, ImageRequestConfig{ResponsesInstructions: "Custom image instructions"})
+
+	payload, err := client.buildResponsesPayload("draw a cat", "gpt-5.4-mini", "1024x1024", "high", "", nil, nil)
+	if err != nil {
+		t.Fatalf("buildResponsesPayload() returned error: %v", err)
+	}
+	if got := payload["instructions"]; got != "Custom image instructions" {
+		t.Fatalf("instructions = %v, want custom instructions", got)
+	}
+}
+
+func TestNewResponsesClientWithProxyAndConfigDefaultsInstructions(t *testing.T) {
+	client := NewResponsesClientWithProxyAndConfig("token", "", map[string]any{
+		"account_id": "acct-1",
+	}, ImageRequestConfig{})
+
+	payload, err := client.buildResponsesPayload("draw a cat", "gpt-5.4-mini", "1024x1024", "", "", nil, nil)
+	if err != nil {
+		t.Fatalf("buildResponsesPayload() returned error: %v", err)
+	}
+	if got := payload["instructions"]; got != DefaultResponsesInstructions {
+		t.Fatalf("instructions = %v, want %q", got, DefaultResponsesInstructions)
+	}
+}
+
 func TestNewResponsesClientWithProxyAndConfigUsesProvidedSSETimeout(t *testing.T) {
 	requestConfig := ImageRequestConfig{
 		RequestTimeout: 15 * time.Second,

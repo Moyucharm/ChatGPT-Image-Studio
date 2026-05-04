@@ -1,6 +1,6 @@
 "use client";
 
-import type { InpaintSourceReference, ImageModel, ImageQuality } from "@/lib/api";
+import type { InpaintSourceReference, ImageModel, ImageQuality, ImageRoutePreference } from "@/lib/api";
 import type {
   ImageConversationTurn,
   ImageMode,
@@ -37,6 +37,7 @@ export function createConversationTurn(payload: {
   size?: string;
   quality?: ImageQuality;
   scale?: string;
+  imageRoute?: ImageRoutePreference;
   sourceImages?: StoredSourceImage[];
   images: StoredImage[];
   createdAt: string;
@@ -53,6 +54,7 @@ export function createConversationTurn(payload: {
     size: payload.size,
     quality: payload.quality,
     scale: payload.scale,
+    imageRoute: payload.imageRoute ?? "auto",
     sourceImages: payload.sourceImages ?? [],
     images: payload.images,
     createdAt: payload.createdAt,

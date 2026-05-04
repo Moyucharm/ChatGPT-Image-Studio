@@ -2,7 +2,7 @@
 
 import localforage from "localforage";
 
-import type { ImageModel, ImageQuality } from "@/lib/api";
+import type { ImageModel, ImageQuality, ImageRoutePreference } from "@/lib/api";
 
 export type ImageMode = "generate" | "edit" | "upscale";
 
@@ -38,6 +38,7 @@ export type ImageConversationTurn = {
   size?: string;
   quality?: ImageQuality;
   scale?: string;
+  imageRoute?: ImageRoutePreference;
   sourceImages?: StoredSourceImage[];
   images: StoredImage[];
   createdAt: string;
@@ -55,6 +56,7 @@ export type ImageConversation = {
   size?: string;
   quality?: ImageQuality;
   scale?: string;
+  imageRoute?: ImageRoutePreference;
   sourceImages?: StoredSourceImage[];
   images: StoredImage[];
   createdAt: string;
@@ -127,11 +129,16 @@ function normalizeImageQuality(value: ImageConversationTurn["quality"]): ImageQu
   return value === "low" || value === "medium" || value === "high" ? value : undefined;
 }
 
+function normalizeImageRoute(value: ImageConversationTurn["imageRoute"]): ImageRoutePreference {
+  return value === "legacy" || value === "responses" ? value : "auto";
+}
+
 function normalizeTurn(turn: ImageConversationTurn): ImageConversationTurn {
   return {
     ...turn,
     mode: turn.mode || "generate",
     quality: normalizeImageQuality(turn.quality),
+    imageRoute: normalizeImageRoute(turn.imageRoute),
     sourceImages: Array.isArray(turn.sourceImages) ? turn.sourceImages : [],
     images: (turn.images || []).map(normalizeStoredImage),
   };
@@ -152,6 +159,7 @@ export function normalizeConversation(conversation: ImageConversation): ImageCon
             size: conversation.size,
             quality: conversation.quality,
             scale: conversation.scale,
+            imageRoute: conversation.imageRoute,
             sourceImages: conversation.sourceImages,
             images: conversation.images || [],
             createdAt: conversation.createdAt,
@@ -171,6 +179,7 @@ export function normalizeConversation(conversation: ImageConversation): ImageCon
     size: latestTurn.size,
     quality: latestTurn.quality,
     scale: latestTurn.scale,
+    imageRoute: latestTurn.imageRoute,
     sourceImages: latestTurn.sourceImages,
     images: latestTurn.images,
     createdAt: latestTurn.createdAt,

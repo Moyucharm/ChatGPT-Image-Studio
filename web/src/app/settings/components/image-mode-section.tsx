@@ -1,6 +1,7 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -38,6 +39,8 @@ const paidImageModelOptions = [
   { label: "gpt-5-5-thinking", value: "gpt-5-5-thinking" },
   { label: "gpt-image-2", value: "gpt-image-2" },
 ];
+
+const defaultResponsesInstructions = "You generate and edit images for the user.";
 
 const cpaRouteStrategyOptions: Array<{
   label: string;
@@ -381,6 +384,38 @@ export function ImageModeSection({
                 ))}
               </SelectContent>
             </Select>
+          </Field>
+        ) : null}
+        {isStudioMode ? (
+          <Field
+            label="Responses 系统提示词"
+            hint="仅在官方 responses 链路生效。留空时后端会使用默认 instructions。"
+            tooltip={
+              <TooltipDetails
+                items={[
+                  {
+                    title: "作用范围",
+                    body: <>只影响 Studio 模式中路由选择为 `responses` 的官方图片请求；legacy 与 CPA 默认图片接口不读取这个值。</>,
+                  },
+                  {
+                    title: "默认值",
+                    body: <code>{defaultResponsesInstructions}</code>,
+                  },
+                  {
+                    title: "留空效果",
+                    body: <>保存为空白后，后端发起 responses 请求时会自动回退到默认值。</>,
+                  },
+                ]}
+              />
+            }
+            fullWidth
+          >
+            <Textarea
+              value={config.chatgpt.responsesInstructions}
+              onChange={(event) => setSection("chatgpt", { ...config.chatgpt, responsesInstructions: event.target.value })}
+              placeholder={defaultResponsesInstructions}
+              className="min-h-28 resize-y rounded-2xl border-stone-200 bg-white text-sm leading-6 shadow-none"
+            />
           </Field>
         ) : null}
       </ConfigSection>

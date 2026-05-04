@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { ImageQuality } from "@/lib/api";
+import type { ImageQuality, ImageRoutePreference } from "@/lib/api";
 import type { ImageMode, StoredSourceImage } from "@/store/image-conversations";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +35,7 @@ type PromptComposerProps = {
   upscaleOptions: string[];
   hasGenerateReferences: boolean;
   availableQuota: string;
+  imageRoutePreference: ImageRoutePreference;
   sourceImages: StoredSourceImage[];
   imagePrompt: string;
   isSubmitting: boolean;
@@ -46,6 +47,7 @@ type PromptComposerProps = {
   onImageAspectRatioChange: (value: string) => void;
   onImageResolutionTierChange: (value: string) => void;
   onImageQualityChange: (value: string) => void;
+  onImageRoutePreferenceChange: (value: ImageRoutePreference) => void;
   onUpscaleScaleChange: (value: string) => void;
   onPromptChange: (value: string) => void;
   onPromptPaste: (event: ReactClipboardEvent<HTMLTextAreaElement>) => void;
@@ -70,6 +72,7 @@ export function PromptComposer({
   upscaleOptions,
   hasGenerateReferences,
   availableQuota,
+  imageRoutePreference,
   sourceImages,
   imagePrompt,
   isSubmitting,
@@ -81,6 +84,7 @@ export function PromptComposer({
   onImageAspectRatioChange,
   onImageResolutionTierChange,
   onImageQualityChange,
+  onImageRoutePreferenceChange,
   onUpscaleScaleChange,
   onPromptChange,
   onPromptPaste,
@@ -356,6 +360,23 @@ export function PromptComposer({
                   </SelectContent>
                 </Select>
               ) : null}
+
+              <Select value={imageRoutePreference} onValueChange={(value) => onImageRoutePreferenceChange(value as ImageRoutePreference)}>
+                <SelectTrigger className="h-8 w-[152px] rounded-lg border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-700 shadow-sm focus-visible:ring-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto" className="text-xs">
+                    默认（跟随系统）
+                  </SelectItem>
+                  <SelectItem value="legacy" className="text-xs">
+                    Legacy
+                  </SelectItem>
+                  <SelectItem value="responses" className="text-xs">
+                    Responses
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex items-center gap-3">

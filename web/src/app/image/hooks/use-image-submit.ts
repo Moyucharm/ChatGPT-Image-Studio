@@ -10,6 +10,7 @@ import {
   upscaleImage,
   type ImageModel,
   type ImageQuality,
+  type ImageRoutePreference,
 } from "@/lib/api";
 import {
   finishImageTask,
@@ -58,6 +59,7 @@ async function generateImageViaTask(
     count: number;
     size?: string;
     quality: ImageQuality;
+    imageRoute: ImageRoutePreference;
   },
 ) {
   const created = await createImageGenerationTask(prompt, options);
@@ -91,6 +93,7 @@ type UseImageSubmitOptions = {
   parsedCount: number;
   imageSize: string;
   imageQuality: ImageQuality;
+  imageRoutePreference: ImageRoutePreference;
   upscaleScale: string;
   selectedConversationId: string | null;
   editorTarget: EditorTarget | null;
@@ -123,6 +126,7 @@ function buildConversationBase(conversationId: string, draftTurn: ImageConversat
     size: draftTurn.size,
     quality: draftTurn.quality,
     scale: draftTurn.scale,
+    imageRoute: draftTurn.imageRoute,
     sourceImages: draftTurn.sourceImages,
     images: draftTurn.images,
     createdAt: draftTurn.createdAt,
@@ -142,6 +146,7 @@ export function useImageSubmit({
   parsedCount,
   imageSize,
   imageQuality,
+  imageRoutePreference,
   upscaleScale,
   selectedConversationId,
   editorTarget,
@@ -184,6 +189,7 @@ export function useImageSubmit({
       prompt,
       model: imageModel,
       count: 1,
+      imageRoute: imageRoutePreference,
       sourceImages: [
         {
           id: makeId(),
@@ -249,6 +255,7 @@ export function useImageSubmit({
           mask: mask.file,
           sourceReference,
           model: imageModel,
+          imageRoute: imageRoutePreference,
         });
       } catch (error) {
         if (!sourceReference || !shouldFallbackSelectionEdit(error)) {
@@ -262,6 +269,7 @@ export function useImageSubmit({
           images: [fallbackImageFile],
           mask: mask.file,
           model: imageModel,
+          imageRoute: imageRoutePreference,
         });
       }
       const resultItems = mergeResultImages(turnId, data.data || [], 1);
@@ -317,6 +325,7 @@ export function useImageSubmit({
     editorTarget,
     focusConversation,
     imageModel,
+    imageRoutePreference,
     makeId,
     setActiveRequest,
     setImagePrompt,
@@ -341,6 +350,7 @@ export function useImageSubmit({
     const turnMaskSource = turnSourceImages.find((item) => item.role === "mask") ?? null;
     const turnScale = turnMode === "upscale" ? turn.scale || "2x" : undefined;
     const turnQuality = turn.quality || "high";
+    const turnImageRoute = turn.imageRoute || "auto";
     const expectedCount = Math.max(1, turn.count || 1);
 
     if (turnMode === "generate" && !prompt) {
@@ -364,6 +374,7 @@ export function useImageSubmit({
       size: turn.size,
       quality: turnMode === "generate" && turnImageSources.length === 0 ? turnQuality : undefined,
       scale: turnScale,
+      imageRoute: turnImageRoute,
       sourceImages: turnSourceImages,
       images: createLoadingImages(expectedCount, turnId),
       createdAt: now,
@@ -403,7 +414,7 @@ export function useImageSubmit({
           const files = await Promise.all(
             turnImageSources.map((item, index) => dataUrlToFile(item.dataUrl, item.name || `reference-${index + 1}.png`)),
           );
-          const data = await editImage({ prompt, images: files, size: turn.size, model: turn.model });
+          const data = await editImage({ prompt, images: files, size: turn.size, model: turn.model, imageRoute: turnImageRoute });
           resultItems = mergeResultImages(turnId, data.data || [], 1);
         } else {
           const data = await generateImageViaTask(prompt, {
@@ -411,6 +422,7 @@ export function useImageSubmit({
             count: expectedCount,
             size: turn.size,
             quality: turnQuality,
+            imageRoute: turnImageRoute,
           });
           resultItems = mergeResultImages(turnId, data.data || [], expectedCount);
         }
@@ -421,13 +433,13 @@ export function useImageSubmit({
           turnImageSources.map((item, index) => dataUrlToFile(item.dataUrl, item.name || `image-${index + 1}.png`)),
         );
         const mask = turnMaskSource ? await dataUrlToFile(turnMaskSource.dataUrl, turnMaskSource.name || "mask.png") : null;
-        const data = await editImage({ prompt, images: files, mask, size: turn.size, model: turn.model });
+        const data = await editImage({ prompt, images: files, mask, size: turn.size, model: turn.model, imageRoute: turnImageRoute });
         resultItems = mergeResultImages(turnId, data.data || [], 1);
       }
 
       if (turnMode === "upscale") {
         const file = await dataUrlToFile(turnImageSources[0].dataUrl, turnImageSources[0].name || "upscale.png");
-        const data = await upscaleImage({ image: file, prompt, scale: turnScale || "2x", model: turn.model });
+        const data = await upscaleImage({ image: file, prompt, scale: turnScale || "2x", model: turn.model, imageRoute: turnImageRoute });
         resultItems = mergeResultImages(turnId, data.data || [], 1);
       }
 
@@ -512,6 +524,7 @@ export function useImageSubmit({
       size: mode === "generate" || mode === "edit" ? imageSize : undefined,
       quality: mode === "generate" && imageSources.length === 0 ? imageQuality : undefined,
       scale: mode === "upscale" ? upscaleScale : undefined,
+      imageRoute: imageRoutePreference,
       sourceImages,
       images: createLoadingImages(expectedCount, turnId),
       createdAt: now,
@@ -557,7 +570,7 @@ export function useImageSubmit({
           const files = await Promise.all(
             imageSources.map((item, index) => dataUrlToFile(item.dataUrl, item.name || `reference-${index + 1}.png`)),
           );
-          const data = await editImage({ prompt, images: files, size: imageSize, model: imageModel });
+          const data = await editImage({ prompt, images: files, size: imageSize, model: imageModel, imageRoute: imageRoutePreference });
           resultItems = mergeResultImages(turnId, data.data || [], 1);
         } else {
           const data = await generateImageViaTask(prompt, {
@@ -565,6 +578,7 @@ export function useImageSubmit({
             count: parsedCount,
             size: imageSize,
             quality: imageQuality,
+            imageRoute: imageRoutePreference,
           });
           resultItems = mergeResultImages(turnId, data.data || [], parsedCount);
         }
@@ -575,13 +589,13 @@ export function useImageSubmit({
           imageSources.map((item, index) => dataUrlToFile(item.dataUrl, item.name || `image-${index + 1}.png`)),
         );
         const mask = maskSource ? await dataUrlToFile(maskSource.dataUrl, maskSource.name || "mask.png") : null;
-        const data = await editImage({ prompt, images: files, mask, size: imageSize, model: imageModel });
+        const data = await editImage({ prompt, images: files, mask, size: imageSize, model: imageModel, imageRoute: imageRoutePreference });
         resultItems = mergeResultImages(turnId, data.data || [], 1);
       }
 
       if (mode === "upscale") {
         const file = await dataUrlToFile(imageSources[0].dataUrl, imageSources[0].name || "upscale.png");
-        const data = await upscaleImage({ image: file, prompt, scale: upscaleScale, model: imageModel });
+        const data = await upscaleImage({ image: file, prompt, scale: upscaleScale, model: imageModel, imageRoute: imageRoutePreference });
         resultItems = mergeResultImages(turnId, data.data || [], 1);
       }
 
@@ -644,6 +658,7 @@ export function useImageSubmit({
     focusConversation,
     imageModel,
     imagePrompt,
+    imageRoutePreference,
     imageSources,
     makeId,
     maskSource,

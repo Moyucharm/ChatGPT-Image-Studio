@@ -19,8 +19,9 @@ import (
 )
 
 const (
-	baseURL              = "https://chatgpt.com/backend-api"
-	defaultUpstreamModel = "gpt-5.4-mini"
+	baseURL                      = "https://chatgpt.com/backend-api"
+	defaultUpstreamModel         = "gpt-5.4-mini"
+	DefaultResponsesInstructions = "You generate and edit images for the user."
 )
 
 const (
@@ -31,10 +32,11 @@ const (
 )
 
 type ImageRequestConfig struct {
-	RequestTimeout time.Duration
-	SSETimeout     time.Duration
-	PollInterval   time.Duration
-	PollMaxWait    time.Duration
+	RequestTimeout        time.Duration
+	SSETimeout            time.Duration
+	PollInterval          time.Duration
+	PollMaxWait           time.Duration
+	ResponsesInstructions string
 }
 
 func normalizeImageRequestConfig(cfg ImageRequestConfig) ImageRequestConfig {
@@ -52,6 +54,9 @@ func normalizeImageRequestConfig(cfg ImageRequestConfig) ImageRequestConfig {
 	}
 	if cfg.PollMaxWait < cfg.SSETimeout {
 		cfg.PollMaxWait = cfg.SSETimeout
+	}
+	if strings.TrimSpace(cfg.ResponsesInstructions) == "" {
+		cfg.ResponsesInstructions = DefaultResponsesInstructions
 	}
 	return cfg
 }

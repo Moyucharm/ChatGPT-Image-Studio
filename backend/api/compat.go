@@ -25,6 +25,7 @@ type imageGenerationRequest struct {
 	Size           string
 	Quality        string
 	Background     string
+	ImageRoute     string
 	ResponseFormat string
 }
 
@@ -34,6 +35,7 @@ type imageEditRequest struct {
 	Images         [][]byte
 	Mask           []byte
 	Size           string
+	ImageRoute     string
 	ResponseFormat string
 }
 
@@ -45,6 +47,7 @@ type compatChatCompletionRequest struct {
 	Size           string              `json:"size"`
 	Quality        string              `json:"quality"`
 	Background     string              `json:"background"`
+	ImageRoute     string              `json:"image_route"`
 	ResponseFormat string              `json:"response_format"`
 }
 
@@ -62,6 +65,7 @@ type compatResponseRequest struct {
 	Size           string               `json:"size"`
 	Quality        string               `json:"quality"`
 	Background     string               `json:"background"`
+	ImageRoute     string               `json:"image_route"`
 	ResponseFormat string               `json:"response_format"`
 }
 
@@ -111,7 +115,7 @@ func (s *Server) executeImageGeneration(ctx context.Context, req imageGeneration
 			}
 		}
 
-		data, err := s.withImageResultsFilteredWithMetadata(ctx, "generate", responseFormat, "", requestedModel, true, allowAccount, newImageRequestMetadata(prompt, size, req.Quality), func(client imageWorkflowClient, upstreamModel string) ([]handler.ImageResult, error) {
+		data, err := s.withImageResultsFilteredWithMetadata(ctx, "generate", responseFormat, "", requestedModel, true, allowAccount, req.ImageRoute, newImageRequestMetadata(prompt, size, req.Quality), func(client imageWorkflowClient, upstreamModel string) ([]handler.ImageResult, error) {
 			return client.GenerateImage(ctx, prompt, upstreamModel, 1, size, req.Quality, req.Background)
 		}, r)
 		if err != nil {
@@ -160,7 +164,7 @@ func (s *Server) executeImageEdit(ctx context.Context, req imageEditRequest, r *
 	requestedModel := normalizeRequestedImageModel(req.Model, s.cfg.ChatGPT.Model)
 	responseFormat := firstNonEmpty(req.ResponseFormat, s.cfg.App.ImageFormat, "url")
 	size := normalizeGenerateImageSize(req.Size)
-	data, err := s.withImageResultsWithMetadata(ctx, "edit", responseFormat, "", requestedModel, handler.SupportsResponsesInlineEdit(req.Images, req.Mask), newImageRequestMetadata(prompt, size, ""), func(client imageWorkflowClient, upstreamModel string) ([]handler.ImageResult, error) {
+	data, err := s.withImageResultsWithMetadata(ctx, "edit", responseFormat, "", requestedModel, handler.SupportsResponsesInlineEdit(req.Images, req.Mask), req.ImageRoute, newImageRequestMetadata(prompt, size, ""), func(client imageWorkflowClient, upstreamModel string) ([]handler.ImageResult, error) {
 		return client.EditImageByUpload(ctx, prompt, upstreamModel, req.Images, req.Mask, size)
 	}, r)
 	if err != nil {
@@ -198,6 +202,7 @@ func (s *Server) handleImageChatCompletions(w http.ResponseWriter, r *http.Reque
 		Size:           req.Size,
 		Quality:        req.Quality,
 		Background:     req.Background,
+		ImageRoute:     req.ImageRoute,
 	})
 	if err != nil {
 		writeCompatImageError(w, err)
@@ -237,6 +242,7 @@ func (s *Server) handleImageResponses(w http.ResponseWriter, r *http.Request) {
 		Size:           req.Size,
 		Quality:        req.Quality,
 		Background:     req.Background,
+		ImageRoute:     req.ImageRoute,
 	})
 	if err != nil {
 		writeCompatImageError(w, err)
@@ -255,6 +261,7 @@ type compatRunRequest struct {
 	Size           string
 	Quality        string
 	Background     string
+	ImageRoute     string
 }
 
 func (s *Server) runCompatImageRequest(ctx context.Context, r *http.Request, req compatRunRequest) (map[string]any, error) {
@@ -266,6 +273,7 @@ func (s *Server) runCompatImageRequest(ctx context.Context, r *http.Request, req
 			Size:           req.Size,
 			Quality:        req.Quality,
 			Background:     req.Background,
+			ImageRoute:     req.ImageRoute,
 			ResponseFormat: "b64_json",
 		}, r)
 	}
@@ -283,6 +291,7 @@ func (s *Server) runCompatImageRequest(ctx context.Context, r *http.Request, req
 		Prompt:         req.Prompt,
 		Images:         images,
 		Size:           req.Size,
+		ImageRoute:     req.ImageRoute,
 		ResponseFormat: "b64_json",
 	}, r)
 }

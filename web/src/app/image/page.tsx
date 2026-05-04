@@ -5,7 +5,7 @@ import "react-medium-image-zoom/dist/styles.css";
 import { ChevronsDown, PanelLeftOpen } from "lucide-react";
 
 import { ImageEditModal } from "@/components/image-edit-modal";
-import { fetchImageBootstrap, type ImageQuality } from "@/lib/api";
+import { fetchImageBootstrap, type ImageQuality, type ImageRoutePreference } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   normalizeConversation,
@@ -322,6 +322,7 @@ export default function ImagePage() {
   const [imageAspectRatio, setImageAspectRatio] = useState<ImageAspectRatio>("auto");
   const [imageResolutionTier, setImageResolutionTier] = useState<ImageResolutionTier>("sd");
   const [imageQuality, setImageQuality] = useState<ImageQuality>("high");
+  const [imageRoutePreference, setImageRoutePreference] = useState<ImageRoutePreference>("auto");
   const [upscaleScale, setUpscaleScale] = useState("2x");
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -536,11 +537,26 @@ export default function ImagePage() {
       }
     };
 
-    if (didLoadQuotaRef.current) {
-      return;
+    const refreshBootstrap = () => {
+      void loadBootstrap();
+    };
+    const refreshBootstrapWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        void loadBootstrap();
+      }
+    };
+
+    if (!didLoadQuotaRef.current) {
+      didLoadQuotaRef.current = true;
+      void loadBootstrap();
     }
-    didLoadQuotaRef.current = true;
-    void loadBootstrap();
+
+    window.addEventListener("focus", refreshBootstrap);
+    document.addEventListener("visibilitychange", refreshBootstrapWhenVisible);
+    return () => {
+      window.removeEventListener("focus", refreshBootstrap);
+      document.removeEventListener("visibilitychange", refreshBootstrapWhenVisible);
+    };
   }, []);
 
   useEffect(() => {
@@ -706,6 +722,7 @@ export default function ImagePage() {
     parsedCount,
     imageSize,
     imageQuality,
+    imageRoutePreference,
     upscaleScale,
     selectedConversationId,
     editorTarget,
@@ -815,6 +832,7 @@ export default function ImagePage() {
           upscaleOptions={upscaleOptions}
           hasGenerateReferences={hasGenerateReferences}
           availableQuota={availableQuota}
+          imageRoutePreference={imageRoutePreference}
           sourceImages={sourceImages}
           imagePrompt={imagePrompt}
           isSubmitting={isSubmitting}
@@ -826,6 +844,7 @@ export default function ImagePage() {
           onImageAspectRatioChange={(value) => setImageAspectRatio(value as ImageAspectRatio)}
           onImageResolutionTierChange={(value) => setImageResolutionTier(value as ImageResolutionTier)}
           onImageQualityChange={(value) => setImageQuality(value as ImageQuality)}
+          onImageRoutePreferenceChange={setImageRoutePreference}
           onUpscaleScaleChange={setUpscaleScale}
           onPromptChange={setImagePrompt}
           onPromptPaste={handlePromptPaste}

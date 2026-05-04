@@ -60,6 +60,7 @@ type ChatGPTConfig struct {
 	FreeImageModel                   string `toml:"free_image_model"`
 	PaidImageRoute                   string `toml:"paid_image_route"`
 	PaidImageModel                   string `toml:"paid_image_model"`
+	ResponsesInstructions            string `toml:"responses_instructions"`
 	StudioAllowDisabledImageAccounts bool   `toml:"studio_allow_disabled_image_accounts"`
 }
 

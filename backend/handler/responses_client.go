@@ -46,10 +46,11 @@ type ImageWorkflowClient interface {
 }
 
 type ResponsesClient struct {
-	backend             *ChatGPTClient
-	accountID           string
-	httpClient          *http.Client
-	requestedImageModel string
+	backend               *ChatGPTClient
+	accountID             string
+	httpClient            *http.Client
+	requestedImageModel   string
+	responsesInstructions string
 }
 
 func NewResponsesClientWithProxy(accessToken, proxyURL string, authData map[string]any) *ResponsesClient {
@@ -65,8 +66,9 @@ func NewResponsesClientWithProxyAndConfig(accessToken, proxyURL string, authData
 		requestConfig,
 	)
 	return &ResponsesClient{
-		backend:   backend,
-		accountID: resolveChatGPTAccountID(accessToken, authData),
+		backend:               backend,
+		accountID:             resolveChatGPTAccountID(accessToken, authData),
+		responsesInstructions: requestConfig.ResponsesInstructions,
 		httpClient: &http.Client{
 			Timeout:   requestConfig.SSETimeout + 30*time.Second,
 			Transport: newChromeTransport(proxyURL),
@@ -207,7 +209,7 @@ func (c *ResponsesClient) buildResponsesPayload(prompt, model string, size, qual
 		"input":               []any{map[string]any{"role": "user", "content": content}},
 		"tools":               []any{tool},
 		"tool_choice":         map[string]any{"type": "image_generation"},
-		"instructions":        "You generate and edit images for the user.",
+		"instructions":        c.responsesInstructions,
 		"parallel_tool_calls": true,
 		"include":             []string{"reasoning.encrypted_content"},
 	}, nil

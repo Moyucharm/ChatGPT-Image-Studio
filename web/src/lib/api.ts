@@ -6,6 +6,7 @@ export type AccountStatus = "正常" | "限流" | "异常" | "禁用";
 export type SyncStatus = "synced" | "pending_upload" | "remote_only" | "remote_deleted";
 export type ImageModel = "gpt-image-1" | "gpt-image-2";
 export type ImageQuality = "low" | "medium" | "high";
+export type ImageRoutePreference = "auto" | "legacy" | "responses";
 export type ImageResponseItem = {
   url?: string;
   b64_json?: string;
@@ -184,6 +185,7 @@ export type ConfigPayload = {
     freeImageModel: string;
     paidImageRoute: string;
     paidImageModel: string;
+    responsesInstructions: string;
     studioAllowDisabledImageAccounts: boolean;
   };
   accounts: {
@@ -389,9 +391,10 @@ export async function generateImageWithOptions(
     count?: number;
     size?: string;
     quality?: ImageQuality;
+    imageRoute?: ImageRoutePreference;
   } = {},
 ) {
-  const { model = "gpt-image-2", count = 1, size, quality = "high" } = options;
+  const { model = "gpt-image-2", count = 1, size, quality = "high", imageRoute = "auto" } = options;
   return httpRequest<ImageResponse>("/v1/images/generations", {
     method: "POST",
     body: {
@@ -400,6 +403,7 @@ export async function generateImageWithOptions(
       n: Math.max(1, count),
       size: size?.trim() || undefined,
       quality,
+      image_route: imageRoute,
       response_format: "b64_json",
     },
   });
@@ -412,9 +416,10 @@ export async function createImageGenerationTask(
     count?: number;
     size?: string;
     quality?: ImageQuality;
+    imageRoute?: ImageRoutePreference;
   } = {},
 ) {
-  const { model = "gpt-image-2", count = 1, size, quality = "high" } = options;
+  const { model = "gpt-image-2", count = 1, size, quality = "high", imageRoute = "auto" } = options;
   return httpRequest<ImageGenerationTaskResponse>("/api/image/tasks/generations", {
     method: "POST",
     body: {
@@ -423,6 +428,7 @@ export async function createImageGenerationTask(
       n: Math.max(1, count),
       size: size?.trim() || undefined,
       quality,
+      image_route: imageRoute,
       response_format: "b64_json",
     },
   });
@@ -439,6 +445,7 @@ export async function editImage({
   sourceReference,
   size,
   model = "gpt-image-2",
+  imageRoute = "auto",
 }: {
   prompt: string;
   images: File[];
@@ -446,10 +453,12 @@ export async function editImage({
   sourceReference?: InpaintSourceReference;
   size?: string;
   model?: ImageModel;
+  imageRoute?: ImageRoutePreference;
 }) {
   const formData = new FormData();
   formData.append("prompt", prompt);
   formData.append("model", model);
+  formData.append("image_route", imageRoute);
   formData.append("response_format", "b64_json");
   if (size?.trim()) {
     formData.append("size", size.trim());
@@ -480,15 +489,18 @@ export async function upscaleImage({
   prompt,
   scale,
   model = "gpt-image-2",
+  imageRoute = "auto",
 }: {
   image: File;
   prompt?: string;
   scale?: string;
   model?: ImageModel;
+  imageRoute?: ImageRoutePreference;
 }) {
   const formData = new FormData();
   formData.append("image", image);
   formData.append("model", model);
+  formData.append("image_route", imageRoute);
   formData.append("response_format", "b64_json");
   formData.append("scale", scale || "2x");
   if (prompt?.trim()) {

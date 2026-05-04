@@ -35,6 +35,7 @@ type configPayload struct {
 		FreeImageModel                   string `json:"freeImageModel"`
 		PaidImageRoute                   string `json:"paidImageRoute"`
 		PaidImageModel                   string `json:"paidImageModel"`
+		ResponsesInstructions            string `json:"responsesInstructions"`
 		StudioAllowDisabledImageAccounts bool   `json:"studioAllowDisabledImageAccounts"`
 	} `json:"chatgpt"`
 	Accounts struct {
@@ -122,6 +123,7 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			"free_image_model":                     payload.ChatGPT.FreeImageModel,
 			"paid_image_route":                     payload.ChatGPT.PaidImageRoute,
 			"paid_image_model":                     payload.ChatGPT.PaidImageModel,
+			"responses_instructions":               payload.ChatGPT.ResponsesInstructions,
 			"studio_allow_disabled_image_accounts": payload.ChatGPT.StudioAllowDisabledImageAccounts,
 		},
 		"accounts": {
@@ -204,6 +206,7 @@ func (s *Server) buildConfigPayloadFromConfig(cfg *config.Config) configPayload 
 	payload.ChatGPT.FreeImageModel = cfg.ChatGPT.FreeImageModel
 	payload.ChatGPT.PaidImageRoute = cfg.ChatGPT.PaidImageRoute
 	payload.ChatGPT.PaidImageModel = cfg.ChatGPT.PaidImageModel
+	payload.ChatGPT.ResponsesInstructions = cfg.ChatGPT.ResponsesInstructions
 	payload.ChatGPT.StudioAllowDisabledImageAccounts = cfg.ChatGPT.StudioAllowDisabledImageAccounts
 
 	payload.Accounts.DefaultQuota = cfg.Accounts.DefaultQuota
