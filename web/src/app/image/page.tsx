@@ -1057,37 +1057,41 @@ export default function ImagePage() {
     [openDraftConversation, setSourceImages],
   );
 
-  const { handleSelectionEditSubmit, handleRetryTurn, handleSubmit } =
-    useImageSubmit({
-      mode,
-      imagePrompt,
-      systemPrompt,
-      imageModel: "gpt-image-2",
-      imageSources,
-      maskSource,
-      sourceImages,
-      parsedCount,
-      imageSize,
-      imageQuality,
-      imageRoutePreference,
-      upscaleScale,
-      selectedConversationId,
-      editorTarget,
-      isSubmitting,
-      makeId,
-      focusConversation,
-      closeSelectionEditor,
-      setImagePrompt,
-      setSystemPrompt,
-      setSourceImages,
-      setIsSubmitting,
-      setActiveRequest,
-      setSubmitElapsedSeconds,
-      setSubmitStartedAt,
-      persistConversation,
-      updateConversation,
-      resetComposer,
-    });
+  const {
+    handleSelectionEditSubmit,
+    handleRerunTurn,
+    handleRetryTurn,
+    handleSubmit,
+  } = useImageSubmit({
+    mode,
+    imagePrompt,
+    systemPrompt,
+    imageModel: "gpt-image-2",
+    imageSources,
+    maskSource,
+    sourceImages,
+    parsedCount,
+    imageSize,
+    imageQuality,
+    imageRoutePreference,
+    upscaleScale,
+    selectedConversationId,
+    editorTarget,
+    isSubmitting,
+    makeId,
+    focusConversation,
+    closeSelectionEditor,
+    setImagePrompt,
+    setSystemPrompt,
+    setSourceImages,
+    setIsSubmitting,
+    setActiveRequest,
+    setSubmitElapsedSeconds,
+    setSubmitStartedAt,
+    persistConversation,
+    updateConversation,
+    resetComposer,
+  });
 
   return (
     <section
@@ -1153,6 +1157,7 @@ export default function ImagePage() {
                 formatProcessingDuration={formatProcessingDuration}
                 onOpenSelectionEditor={openSelectionEditor}
                 onSeedFromResult={seedFromResult}
+                onRerunTurn={handleRerunTurn}
                 onRetryTurn={handleRetryTurn}
               />
             )}

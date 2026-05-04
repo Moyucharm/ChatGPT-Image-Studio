@@ -294,7 +294,7 @@ export function PromptComposer({
                   }
                 }
               }}
-              className="min-h-[64px] max-h-[480px] resize-none border-0 bg-transparent !px-0 !py-1 text-[15px] leading-7 text-stone-900 shadow-none placeholder:text-stone-400 focus-visible:ring-0 overflow-y-auto"
+              className="block min-h-[72px] max-h-[480px] resize-none border-0 bg-transparent !px-0 !py-2 text-[15px] leading-7 text-stone-900 shadow-none placeholder:text-stone-400 focus-visible:ring-0 overflow-y-auto"
             />
           </div>
 

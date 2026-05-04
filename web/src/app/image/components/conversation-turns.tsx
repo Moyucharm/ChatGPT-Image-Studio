@@ -112,6 +112,10 @@ type ConversationTurnsProps = {
     conversationId: string,
     turn: ImageConversationTurn,
   ) => Promise<void>;
+  onRerunTurn: (
+    conversationId: string,
+    turn: ImageConversationTurn,
+  ) => Promise<void>;
 };
 
 export function ConversationTurns({
@@ -128,6 +132,7 @@ export function ConversationTurns({
   onOpenSelectionEditor,
   onSeedFromResult,
   onRetryTurn,
+  onRerunTurn,
 }: ConversationTurnsProps) {
   return (
     <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-8 px-4 py-8 sm:px-6">
@@ -309,6 +314,18 @@ export function ConversationTurns({
                                 aria-label="选区"
                               >
                                 <Brush className="size-4" />
+                              </button>
+                              <button
+                                type="button"
+                                className="inline-flex size-8 items-center justify-center rounded-md text-white/90 transition hover:bg-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                onClick={() =>
+                                  void onRerunTurn(conversationId, turn)
+                                }
+                                disabled={isSubmitting}
+                                title={isSubmitting ? "处理中" : "重试"}
+                                aria-label="重试"
+                              >
+                                <RotateCcw className="size-4" />
                               </button>
                               <button
                                 type="button"
