@@ -95,6 +95,8 @@ export function PromptComposer({
   const dragDepthRef = useRef(0);
   const [isDragActive, setIsDragActive] = useState(false);
   const imageQualityLabel = imageQualityOptions.find((item) => item.value === imageQuality)?.label ?? imageQuality;
+  const imageRoutePreferenceLabel =
+    imageRoutePreference === "responses" ? "Responses" : imageRoutePreference === "legacy" ? "Legacy" : "默认";
   const showCanvasControls = mode !== "upscale";
   const showGenerateOnlyControls = mode === "generate" && !hasGenerateReferences;
   const sizeHintTooltip =
@@ -240,43 +242,69 @@ export function PromptComposer({
             />
           </div>
           
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 bg-stone-50/50 px-3 py-2.5 rounded-b-xl">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex rounded-lg bg-white p-1 border border-stone-200 shadow-sm mr-1">
-                {modeOptions.map((item) => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onModeChange(item.value);
-                    }}
-                    className={cn(
-                      "rounded-md px-3 py-1.5 text-xs font-medium transition",
-                      mode === item.value
-                        ? "bg-stone-100 text-stone-950"
-                        : "text-stone-600 hover:bg-stone-50 hover:text-stone-900",
-                    )}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+          <div className="rounded-b-xl border-t border-stone-100 bg-stone-50/50 px-3 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="inline-flex rounded-lg border border-stone-200 bg-white p-1 shadow-sm">
+                  {modeOptions.map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onModeChange(item.value);
+                      }}
+                      className={cn(
+                        "rounded-md px-3 py-1.5 text-xs font-medium transition",
+                        mode === item.value
+                          ? "bg-stone-100 text-stone-950"
+                          : "text-stone-600 hover:bg-stone-50 hover:text-stone-900",
+                      )}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 rounded-lg border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-700 shadow-sm"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    uploadInputRef.current?.click();
+                  }}
+                  title="上传参考图"
+                >
+                  <ImagePlus className="size-4 text-stone-500" />
+                </Button>
               </div>
 
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 rounded-lg border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-700 shadow-sm"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  uploadInputRef.current?.click();
-                }}
-                title="上传参考图"
-              >
-                <ImagePlus className="size-4 text-stone-500" />
-              </Button>
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] font-medium text-stone-400">
+                  剩余额度 {availableQuota}
+                </span>
+                <button
+                  type="button"
+                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-stone-950 text-white shadow-sm transition hover:bg-stone-800 disabled:opacity-50 disabled:hover:bg-stone-950"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void onSubmit();
+                  }}
+                  disabled={isSubmitting}
+                  aria-label="提交"
+                >
+                  {isSubmitting ? (
+                    <LoaderCircle className="size-4 animate-spin text-white/70" />
+                  ) : (
+                    <ArrowUp className="size-4" strokeWidth={3} />
+                  )}
+                </button>
+              </div>
+            </div>
 
+            <div className="mt-2 flex flex-wrap items-center gap-2">
               {showCanvasControls ? (
                 <Select value={imageAspectRatio} onValueChange={onImageAspectRatioChange}>
                   <SelectTrigger className="h-8 w-[96px] rounded-lg border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-700 shadow-sm focus-visible:ring-0">
@@ -362,8 +390,8 @@ export function PromptComposer({
               ) : null}
 
               <Select value={imageRoutePreference} onValueChange={(value) => onImageRoutePreferenceChange(value as ImageRoutePreference)}>
-                <SelectTrigger className="h-8 w-[152px] rounded-lg border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-700 shadow-sm focus-visible:ring-0">
-                  <SelectValue />
+                <SelectTrigger className="h-8 w-[112px] rounded-lg border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-700 shadow-sm focus-visible:ring-0">
+                  <SelectValue>{imageRoutePreferenceLabel}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="auto" className="text-xs">
@@ -377,28 +405,6 @@ export function PromptComposer({
                   </SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <span className="text-[11px] font-medium text-stone-400">
-                剩余额度 {availableQuota}
-              </span>
-              <button
-                type="button"
-                className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-stone-950 text-white shadow-sm transition hover:bg-stone-800 disabled:opacity-50 disabled:hover:bg-stone-950"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void onSubmit();
-                }}
-                disabled={isSubmitting}
-                aria-label="提交"
-              >
-                {isSubmitting ? (
-                  <LoaderCircle className="size-4 animate-spin text-white/70" />
-                ) : (
-                  <ArrowUp className="size-4" strokeWidth={3} />
-                )}
-              </button>
             </div>
           </div>
           
