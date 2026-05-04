@@ -1,8 +1,21 @@
 "use client";
 
-import { useRef, useState, type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent, type ReactNode, type RefObject } from "react";
+import {
+  useRef,
+  useState,
+  type ClipboardEvent as ReactClipboardEvent,
+  type DragEvent as ReactDragEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import Zoom from "react-medium-image-zoom";
-import { ArrowUp, CircleHelp, ImagePlus, LoaderCircle, Trash2 } from "lucide-react";
+import {
+  ArrowUp,
+  CircleHelp,
+  ImagePlus,
+  LoaderCircle,
+  Trash2,
+} from "lucide-react";
 
 import { AppImage as Image } from "@/components/app-image";
 import { Button } from "@/components/ui/button";
@@ -27,10 +40,18 @@ type PromptComposerProps = {
   imageAspectRatioOptions: Array<{ label: string; value: string }>;
   imageResolutionTier: string;
   imageResolutionTierLabel: string;
-  imageResolutionTierOptions: Array<{ label: string; value: string; disabled?: boolean }>;
+  imageResolutionTierOptions: Array<{
+    label: string;
+    value: string;
+    disabled?: boolean;
+  }>;
   imageSizeHint: ReactNode;
   imageQuality: ImageQuality;
-  imageQualityOptions: Array<{ label: string; value: ImageQuality; description: string }>;
+  imageQualityOptions: Array<{
+    label: string;
+    value: ImageQuality;
+    description: string;
+  }>;
   upscaleScale: string;
   upscaleOptions: string[];
   hasGenerateReferences: boolean;
@@ -38,6 +59,8 @@ type PromptComposerProps = {
   imageRoutePreference: ImageRoutePreference;
   sourceImages: StoredSourceImage[];
   imagePrompt: string;
+  systemPrompt: string;
+  activePromptKind: "user" | "system";
   isSubmitting: boolean;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   uploadInputRef: RefObject<HTMLInputElement | null>;
@@ -50,9 +73,14 @@ type PromptComposerProps = {
   onImageRoutePreferenceChange: (value: ImageRoutePreference) => void;
   onUpscaleScaleChange: (value: string) => void;
   onPromptChange: (value: string) => void;
+  onSystemPromptChange: (value: string) => void;
+  onActivePromptKindChange: (value: "user" | "system") => void;
   onPromptPaste: (event: ReactClipboardEvent<HTMLTextAreaElement>) => void;
   onRemoveSourceImage: (id: string) => void;
-  onAppendFiles: (files: FileList | null, role: "image" | "mask") => Promise<void>;
+  onAppendFiles: (
+    files: FileList | null,
+    role: "image" | "mask",
+  ) => Promise<void>;
   onSubmit: () => Promise<void>;
 };
 
@@ -75,6 +103,8 @@ export function PromptComposer({
   imageRoutePreference,
   sourceImages,
   imagePrompt,
+  systemPrompt,
+  activePromptKind,
   isSubmitting,
   textareaRef,
   uploadInputRef,
@@ -87,6 +117,8 @@ export function PromptComposer({
   onImageRoutePreferenceChange,
   onUpscaleScaleChange,
   onPromptChange,
+  onSystemPromptChange,
+  onActivePromptKindChange,
   onPromptPaste,
   onRemoveSourceImage,
   onAppendFiles,
@@ -94,29 +126,49 @@ export function PromptComposer({
 }: PromptComposerProps) {
   const dragDepthRef = useRef(0);
   const [isDragActive, setIsDragActive] = useState(false);
-  const imageQualityLabel = imageQualityOptions.find((item) => item.value === imageQuality)?.label ?? imageQuality;
+  const imageQualityLabel =
+    imageQualityOptions.find((item) => item.value === imageQuality)?.label ??
+    imageQuality;
   const imageRoutePreferenceLabel =
-    imageRoutePreference === "responses" ? "Responses" : imageRoutePreference === "legacy" ? "Legacy" : "默认";
+    imageRoutePreference === "responses"
+      ? "Responses"
+      : imageRoutePreference === "legacy"
+        ? "Legacy"
+        : "默认";
+  const isSystemPromptActive = activePromptKind === "system";
+  const currentPrompt = isSystemPromptActive ? systemPrompt : imagePrompt;
+  const promptPlaceholder = isSystemPromptActive
+    ? "系统提示词仅在responses模式下生效。留空使用默认。"
+    : mode === "generate"
+      ? "描述你想生成的画面，也可以先上传参考图"
+      : mode === "edit"
+        ? "描述你想如何修改当前图片"
+        : "可选：描述你想增强的方向";
   const showCanvasControls = mode !== "upscale";
-  const showGenerateOnlyControls = mode === "generate" && !hasGenerateReferences;
-  const sizeHintTooltip =
-    showCanvasControls ? (
-      <span className="group relative inline-flex items-center align-middle">
-        <span
-          tabIndex={0}
-          className="inline-flex size-8 cursor-help items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-400 transition-colors hover:text-stone-700 focus-visible:text-stone-700 focus-visible:outline-none"
-          aria-label="查看分辨率说明"
-        >
-          <CircleHelp className="size-4" />
-        </span>
-        <span className="pointer-events-none absolute right-0 bottom-full z-30 mb-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-stone-200 bg-white px-4 py-3 text-xs font-normal leading-6 text-stone-600 opacity-0 shadow-lg transition-all duration-200 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100">
-          {imageSizeHint}
-        </span>
+  const showGenerateOnlyControls =
+    mode === "generate" && !hasGenerateReferences;
+  const sizeHintTooltip = showCanvasControls ? (
+    <span className="group relative inline-flex items-center align-middle">
+      <span
+        tabIndex={0}
+        className="inline-flex size-8 cursor-help items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-400 transition-colors hover:text-stone-700 focus-visible:text-stone-700 focus-visible:outline-none"
+        aria-label="查看分辨率说明"
+      >
+        <CircleHelp className="size-4" />
       </span>
-    ) : null;
+      <span className="pointer-events-none absolute right-0 bottom-full z-30 mb-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-stone-200 bg-white px-4 py-3 text-xs font-normal leading-6 text-stone-600 opacity-0 shadow-lg transition-all duration-200 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100">
+        {imageSizeHint}
+      </span>
+    </span>
+  ) : null;
 
   const hasImageFiles = (dataTransfer: DataTransfer | null) =>
-    Boolean(dataTransfer && Array.from(dataTransfer.items).some((item) => item.kind === "file" && item.type.startsWith("image/")));
+    Boolean(
+      dataTransfer &&
+      Array.from(dataTransfer.items).some(
+        (item) => item.kind === "file" && item.type.startsWith("image/"),
+      ),
+    );
 
   const handleDragEnter = (event: ReactDragEvent<HTMLDivElement>) => {
     if (isSubmitting || !hasImageFiles(event.dataTransfer)) {
@@ -176,8 +228,12 @@ export function PromptComposer({
           {isDragActive ? (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-stone-300 bg-white/88 px-4 text-center backdrop-blur-sm">
               <div className="space-y-1">
-                <div className="text-sm font-semibold text-stone-900">松手即可添加图片</div>
-                <div className="text-xs text-stone-500">会作为当前模式的源图或参考图加入对话框</div>
+                <div className="text-sm font-semibold text-stone-900">
+                  松手即可添加图片
+                </div>
+                <div className="text-xs text-stone-500">
+                  会作为当前模式的源图或参考图加入对话框
+                </div>
               </div>
             </div>
           ) : null}
@@ -220,16 +276,16 @@ export function PromptComposer({
           <div className="px-4 pb-2 pt-3">
             <Textarea
               ref={textareaRef}
-              value={imagePrompt}
-              onChange={(event) => onPromptChange(event.target.value)}
-              placeholder={
-                mode === "generate"
-                  ? "描述你想生成的画面，也可以先上传参考图"
-                  : mode === "edit"
-                    ? "描述你想如何修改当前图片"
-                    : "可选：描述你想增强的方向"
-              }
-              onPaste={onPromptPaste}
+              value={currentPrompt}
+              onChange={(event) => {
+                if (isSystemPromptActive) {
+                  onSystemPromptChange(event.target.value);
+                } else {
+                  onPromptChange(event.target.value);
+                }
+              }}
+              placeholder={promptPlaceholder}
+              onPaste={isSystemPromptActive ? undefined : onPromptPaste}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
@@ -241,7 +297,7 @@ export function PromptComposer({
               className="min-h-[64px] max-h-[480px] resize-none border-0 bg-transparent !px-0 !py-1 text-[15px] leading-7 text-stone-900 shadow-none placeholder:text-stone-400 focus-visible:ring-0 overflow-y-auto"
             />
           </div>
-          
+
           <div className="rounded-b-xl border-t border-stone-100 bg-stone-50/50 px-3 py-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -279,6 +335,42 @@ export function PromptComposer({
                 >
                   <ImagePlus className="size-4 text-stone-500" />
                 </Button>
+
+                <div className="inline-flex h-8 rounded-lg border border-stone-200 bg-white p-1 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onActivePromptKindChange("user");
+                      textareaRef.current?.focus();
+                    }}
+                    className={cn(
+                      "rounded-md px-2.5 text-xs font-medium transition",
+                      !isSystemPromptActive
+                        ? "bg-stone-100 text-stone-950"
+                        : "text-stone-500 hover:bg-stone-50 hover:text-stone-900",
+                    )}
+                  >
+                    用户
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onActivePromptKindChange("system");
+                      textareaRef.current?.focus();
+                    }}
+                    className={cn(
+                      "rounded-md px-2.5 text-xs font-medium transition",
+                      isSystemPromptActive
+                        ? "bg-stone-100 text-stone-950"
+                        : "text-stone-500 hover:bg-stone-50 hover:text-stone-900",
+                    )}
+                    title="系统提示词仅在 Responses 模式下生效"
+                  >
+                    系统
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-center gap-3">
@@ -306,13 +398,20 @@ export function PromptComposer({
 
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {showCanvasControls ? (
-                <Select value={imageAspectRatio} onValueChange={onImageAspectRatioChange}>
+                <Select
+                  value={imageAspectRatio}
+                  onValueChange={onImageAspectRatioChange}
+                >
                   <SelectTrigger className="h-8 w-[96px] rounded-lg border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-700 shadow-sm focus-visible:ring-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {imageAspectRatioOptions.map((item) => (
-                      <SelectItem key={item.value} value={item.value} className="text-xs">
+                      <SelectItem
+                        key={item.value}
+                        value={item.value}
+                        className="text-xs"
+                      >
                         {item.label}
                       </SelectItem>
                     ))}
@@ -321,7 +420,10 @@ export function PromptComposer({
               ) : null}
 
               {showCanvasControls ? (
-                <Select value={imageResolutionTier} onValueChange={onImageResolutionTierChange}>
+                <Select
+                  value={imageResolutionTier}
+                  onValueChange={onImageResolutionTierChange}
+                >
                   <SelectTrigger
                     className="h-8 w-[160px] rounded-lg border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-700 shadow-sm focus-visible:ring-0"
                     title={imageResolutionTierLabel}
@@ -330,7 +432,12 @@ export function PromptComposer({
                   </SelectTrigger>
                   <SelectContent>
                     {imageResolutionTierOptions.map((item) => (
-                      <SelectItem key={item.value} value={item.value} disabled={item.disabled} className="text-xs">
+                      <SelectItem
+                        key={item.value}
+                        value={item.value}
+                        disabled={item.disabled}
+                        className="text-xs"
+                      >
                         {item.label}
                       </SelectItem>
                     ))}
@@ -341,16 +448,27 @@ export function PromptComposer({
               {sizeHintTooltip}
 
               {showGenerateOnlyControls ? (
-                <Select value={imageQuality} onValueChange={onImageQualityChange}>
+                <Select
+                  value={imageQuality}
+                  onValueChange={onImageQualityChange}
+                >
                   <SelectTrigger
                     className="h-8 w-[100px] rounded-lg border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-700 shadow-sm focus-visible:ring-0"
-                    title={imageQualityOptions.find((item) => item.value === imageQuality)?.description}
+                    title={
+                      imageQualityOptions.find(
+                        (item) => item.value === imageQuality,
+                      )?.description
+                    }
                   >
                     <SelectValue>{`质量 ${imageQualityLabel}`}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {imageQualityOptions.map((item) => (
-                      <SelectItem key={item.value} value={item.value} className="text-xs">
+                      <SelectItem
+                        key={item.value}
+                        value={item.value}
+                        className="text-xs"
+                      >
                         <span title={item.description}>质量 {item.label}</span>
                       </SelectItem>
                     ))}
@@ -360,7 +478,9 @@ export function PromptComposer({
 
               {showGenerateOnlyControls ? (
                 <div className="flex h-8 items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-2 shadow-sm">
-                  <span className="text-xs font-medium text-stone-500">张数</span>
+                  <span className="text-xs font-medium text-stone-500">
+                    张数
+                  </span>
                   <Input
                     type="number"
                     min="1"
@@ -375,7 +495,10 @@ export function PromptComposer({
               ) : null}
 
               {mode === "upscale" ? (
-                <Select value={upscaleScale} onValueChange={onUpscaleScaleChange}>
+                <Select
+                  value={upscaleScale}
+                  onValueChange={onUpscaleScaleChange}
+                >
                   <SelectTrigger className="h-8 w-[96px] rounded-lg border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-700 shadow-sm focus-visible:ring-0">
                     <SelectValue />
                   </SelectTrigger>
@@ -389,7 +512,12 @@ export function PromptComposer({
                 </Select>
               ) : null}
 
-              <Select value={imageRoutePreference} onValueChange={(value) => onImageRoutePreferenceChange(value as ImageRoutePreference)}>
+              <Select
+                value={imageRoutePreference}
+                onValueChange={(value) =>
+                  onImageRoutePreferenceChange(value as ImageRoutePreference)
+                }
+              >
                 <SelectTrigger className="h-8 w-[112px] rounded-lg border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-700 shadow-sm focus-visible:ring-0">
                   <SelectValue>{imageRoutePreferenceLabel}</SelectValue>
                 </SelectTrigger>
@@ -407,7 +535,7 @@ export function PromptComposer({
               </Select>
             </div>
           </div>
-          
+
           <input
             ref={uploadInputRef}
             type="file"

@@ -3,7 +3,11 @@ import type { AuthRole } from "@/store/auth";
 
 export type AccountType = "Free" | "Plus" | "Pro" | "Team";
 export type AccountStatus = "正常" | "限流" | "异常" | "禁用";
-export type SyncStatus = "synced" | "pending_upload" | "remote_only" | "remote_deleted";
+export type SyncStatus =
+  | "synced"
+  | "pending_upload"
+  | "remote_only"
+  | "remote_deleted";
 export type ImageModel = "gpt-image-1" | "gpt-image-2";
 export type ImageQuality = "low" | "medium" | "high";
 export type ImageRoutePreference = "auto" | "legacy" | "responses";
@@ -338,10 +342,15 @@ export async function updateAccount(
   });
 }
 
-export async function fetchAccountQuota(accountId: string, options: { refresh?: boolean } = {}) {
+export async function fetchAccountQuota(
+  accountId: string,
+  options: { refresh?: boolean } = {},
+) {
   const refresh = options.refresh ?? true;
   const suffix = refresh ? "" : "?refresh=false";
-  return httpRequest<AccountQuotaResponse>(`/api/accounts/${encodeURIComponent(accountId)}/quota${suffix}`);
+  return httpRequest<AccountQuotaResponse>(
+    `/api/accounts/${encodeURIComponent(accountId)}/quota${suffix}`,
+  );
 }
 
 export async function fetchSyncStatus() {
@@ -374,13 +383,20 @@ export async function fetchVersionInfo() {
 }
 
 export async function runSync(direction: "pull" | "push") {
-  return httpRequest<{ result: SyncRunResult; status?: SyncStatusResponse }>("/api/sync/run", {
-    method: "POST",
-    body: { direction },
-  });
+  return httpRequest<{ result: SyncRunResult; status?: SyncStatusResponse }>(
+    "/api/sync/run",
+    {
+      method: "POST",
+      body: { direction },
+    },
+  );
 }
 
-export async function generateImage(prompt: string, model: ImageModel = "gpt-image-2", count = 1) {
+export async function generateImage(
+  prompt: string,
+  model: ImageModel = "gpt-image-2",
+  count = 1,
+) {
   return generateImageWithOptions(prompt, { model, count });
 }
 
@@ -392,9 +408,17 @@ export async function generateImageWithOptions(
     size?: string;
     quality?: ImageQuality;
     imageRoute?: ImageRoutePreference;
+    systemPrompt?: string;
   } = {},
 ) {
-  const { model = "gpt-image-2", count = 1, size, quality = "high", imageRoute = "auto" } = options;
+  const {
+    model = "gpt-image-2",
+    count = 1,
+    size,
+    quality = "high",
+    imageRoute = "auto",
+    systemPrompt,
+  } = options;
   return httpRequest<ImageResponse>("/v1/images/generations", {
     method: "POST",
     body: {
@@ -404,6 +428,7 @@ export async function generateImageWithOptions(
       size: size?.trim() || undefined,
       quality,
       image_route: imageRoute,
+      system_prompt: systemPrompt?.trim() || undefined,
       response_format: "b64_json",
     },
   });
@@ -417,25 +442,39 @@ export async function createImageGenerationTask(
     size?: string;
     quality?: ImageQuality;
     imageRoute?: ImageRoutePreference;
+    systemPrompt?: string;
   } = {},
 ) {
-  const { model = "gpt-image-2", count = 1, size, quality = "high", imageRoute = "auto" } = options;
-  return httpRequest<ImageGenerationTaskResponse>("/api/image/tasks/generations", {
-    method: "POST",
-    body: {
-      prompt,
-      model,
-      n: Math.max(1, count),
-      size: size?.trim() || undefined,
-      quality,
-      image_route: imageRoute,
-      response_format: "b64_json",
+  const {
+    model = "gpt-image-2",
+    count = 1,
+    size,
+    quality = "high",
+    imageRoute = "auto",
+    systemPrompt,
+  } = options;
+  return httpRequest<ImageGenerationTaskResponse>(
+    "/api/image/tasks/generations",
+    {
+      method: "POST",
+      body: {
+        prompt,
+        model,
+        n: Math.max(1, count),
+        size: size?.trim() || undefined,
+        quality,
+        image_route: imageRoute,
+        system_prompt: systemPrompt?.trim() || undefined,
+        response_format: "b64_json",
+      },
     },
-  });
+  );
 }
 
 export async function fetchImageGenerationTask(taskId: string) {
-  return httpRequest<ImageGenerationTaskResponse>(`/api/image/tasks/${encodeURIComponent(taskId)}`);
+  return httpRequest<ImageGenerationTaskResponse>(
+    `/api/image/tasks/${encodeURIComponent(taskId)}`,
+  );
 }
 
 export async function editImage({
@@ -446,6 +485,7 @@ export async function editImage({
   size,
   model = "gpt-image-2",
   imageRoute = "auto",
+  systemPrompt,
 }: {
   prompt: string;
   images: File[];
@@ -454,12 +494,16 @@ export async function editImage({
   size?: string;
   model?: ImageModel;
   imageRoute?: ImageRoutePreference;
+  systemPrompt?: string;
 }) {
   const formData = new FormData();
   formData.append("prompt", prompt);
   formData.append("model", model);
   formData.append("image_route", imageRoute);
   formData.append("response_format", "b64_json");
+  if (systemPrompt?.trim()) {
+    formData.append("system_prompt", systemPrompt.trim());
+  }
   if (size?.trim()) {
     formData.append("size", size.trim());
   }
@@ -490,12 +534,14 @@ export async function upscaleImage({
   scale,
   model = "gpt-image-2",
   imageRoute = "auto",
+  systemPrompt,
 }: {
   image: File;
   prompt?: string;
   scale?: string;
   model?: ImageModel;
   imageRoute?: ImageRoutePreference;
+  systemPrompt?: string;
 }) {
   const formData = new FormData();
   formData.append("image", image);
@@ -503,6 +549,9 @@ export async function upscaleImage({
   formData.append("image_route", imageRoute);
   formData.append("response_format", "b64_json");
   formData.append("scale", scale || "2x");
+  if (systemPrompt?.trim()) {
+    formData.append("system_prompt", systemPrompt.trim());
+  }
   if (prompt?.trim()) {
     formData.append("prompt", prompt.trim());
   }

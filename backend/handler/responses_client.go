@@ -90,6 +90,12 @@ func (c *ResponsesClient) DownloadAsBase64(ctx context.Context, url string) (str
 	return c.backend.DownloadAsBase64(ctx, url)
 }
 
+func (c *ResponsesClient) SetResponsesInstructions(instructions string) {
+	if trimmed := strings.TrimSpace(instructions); trimmed != "" {
+		c.responsesInstructions = trimmed
+	}
+}
+
 func (c *ResponsesClient) GenerateImage(ctx context.Context, prompt, model string, n int, size, quality, background string) ([]ImageResult, error) {
 	prompt = buildResponsesPrompt(prompt)
 	if shouldUseBackgroundResponses(size, quality) {

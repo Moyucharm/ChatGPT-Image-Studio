@@ -12,10 +12,7 @@ import {
   type ImageQuality,
   type ImageRoutePreference,
 } from "@/lib/api";
-import {
-  finishImageTask,
-  startImageTask,
-} from "@/store/image-active-tasks";
+import { finishImageTask, startImageTask } from "@/store/image-active-tasks";
 import type {
   ImageConversation,
   ImageConversationTurn,
@@ -60,15 +57,22 @@ async function generateImageViaTask(
     size?: string;
     quality: ImageQuality;
     imageRoute: ImageRoutePreference;
+    systemPrompt?: string;
+    onTaskCreated?: (taskId: string) => Promise<void> | void;
   },
 ) {
   const created = await createImageGenerationTask(prompt, options);
   let task = created.task;
+  if (task.id) {
+    await options.onTaskCreated?.(task.id);
+  }
   const startedAt = Date.now();
 
   while (task.status === "queued" || task.status === "running") {
     if (Date.now() - startedAt > imageGenerationTaskMaxWaitMs) {
-      throw new Error("图片生成任务等待超时，请稍后在历史记录中查看或降低分辨率后重试");
+      throw new Error(
+        "图片生成任务等待超时，请稍后在历史记录中查看或降低分辨率后重试",
+      );
     }
     await wait(imageGenerationTaskPollIntervalMs);
     task = (await fetchImageGenerationTask(task.id)).task;
@@ -86,6 +90,7 @@ async function generateImageViaTask(
 type UseImageSubmitOptions = {
   mode: ImageMode;
   imagePrompt: string;
+  systemPrompt: string;
   imageModel: ImageModel;
   imageSources: StoredSourceImage[];
   maskSource: StoredSourceImage | null;
@@ -102,6 +107,7 @@ type UseImageSubmitOptions = {
   focusConversation: (conversationId: string) => void;
   closeSelectionEditor: () => void;
   setImagePrompt: (value: string) => void;
+  setSystemPrompt: (value: string) => void;
   setSourceImages: (value: StoredSourceImage[]) => void;
   setIsSubmitting: (value: boolean) => void;
   setActiveRequest: (value: ActiveRequestState | null) => void;
@@ -115,12 +121,16 @@ type UseImageSubmitOptions = {
   resetComposer: (nextMode?: ImageMode) => void;
 };
 
-function buildConversationBase(conversationId: string, draftTurn: ImageConversationTurn): ImageConversation {
+function buildConversationBase(
+  conversationId: string,
+  draftTurn: ImageConversationTurn,
+): ImageConversation {
   return {
     id: conversationId,
     title: draftTurn.title,
     mode: draftTurn.mode,
     prompt: draftTurn.prompt,
+    systemPrompt: draftTurn.systemPrompt,
     model: draftTurn.model,
     count: draftTurn.count,
     size: draftTurn.size,
@@ -139,6 +149,7 @@ function buildConversationBase(conversationId: string, draftTurn: ImageConversat
 export function useImageSubmit({
   mode,
   imagePrompt,
+  systemPrompt,
   imageModel,
   imageSources,
   maskSource,
@@ -155,6 +166,7 @@ export function useImageSubmit({
   focusConversation,
   closeSelectionEditor,
   setImagePrompt,
+  setSystemPrompt,
   setSourceImages,
   setIsSubmitting,
   setActiveRequest,
@@ -164,335 +176,450 @@ export function useImageSubmit({
   updateConversation,
   resetComposer,
 }: UseImageSubmitOptions) {
-  const handleSelectionEditSubmit = useCallback(async ({
-    prompt,
-    mask,
-  }: {
-    prompt: string;
-    mask: {
-      file: File;
-      previewDataUrl: string;
-    };
-  }) => {
-    if (!editorTarget) {
-      return;
-    }
-
-    const sourceReference = buildInpaintSourceReference(editorTarget.image);
-    const conversationId = editorTarget.conversationId;
-    const turnId = makeId();
-    const now = new Date().toISOString();
-    const draftTurn = createConversationTurn({
-      turnId,
-      title: buildConversationTitle("edit", prompt, upscaleScale),
-      mode: "edit",
+  const handleSelectionEditSubmit = useCallback(
+    async ({
       prompt,
-      model: imageModel,
-      count: 1,
-      imageRoute: imageRoutePreference,
-      sourceImages: [
-        {
-          id: makeId(),
-          role: "image",
-          name: editorTarget.imageName,
-          dataUrl: editorTarget.sourceDataUrl,
-        },
-        {
-          id: makeId(),
-          role: "mask",
-          name: "mask.png",
-          dataUrl: mask.previewDataUrl,
-        },
-      ],
-      images: createLoadingImages(1, turnId),
-      createdAt: now,
-      status: "generating",
-    });
+      mask,
+    }: {
+      prompt: string;
+      mask: {
+        file: File;
+        previewDataUrl: string;
+      };
+    }) => {
+      if (!editorTarget) {
+        return;
+      }
 
-    const startedAt = Date.now();
-    setIsSubmitting(true);
-    setActiveRequest({
-      conversationId,
-      turnId,
-      mode: "edit",
-      count: 1,
-      variant: "selection-edit",
-    });
-    setSubmitElapsedSeconds(0);
-    setSubmitStartedAt(startedAt);
-    focusConversation(conversationId);
-    setImagePrompt("");
-    setSourceImages([]);
-    closeSelectionEditor();
-    try {
-      await updateConversation(conversationId, (current) => {
-        if (!current) {
-          return buildConversationBase(conversationId, draftTurn);
-        }
-        return {
-          ...current,
-          turns: [...(current.turns ?? []), draftTurn],
-        };
+      const sourceReference = buildInpaintSourceReference(editorTarget.image);
+      const conversationId = editorTarget.conversationId;
+      const turnId = makeId();
+      const now = new Date().toISOString();
+      const draftTurn = createConversationTurn({
+        turnId,
+        title: buildConversationTitle("edit", prompt, upscaleScale),
+        mode: "edit",
+        prompt,
+        model: imageModel,
+        count: 1,
+        imageRoute: imageRoutePreference,
+        sourceImages: [
+          {
+            id: makeId(),
+            role: "image",
+            name: editorTarget.imageName,
+            dataUrl: editorTarget.sourceDataUrl,
+          },
+          {
+            id: makeId(),
+            role: "mask",
+            name: "mask.png",
+            dataUrl: mask.previewDataUrl,
+          },
+        ],
+        images: createLoadingImages(1, turnId),
+        createdAt: now,
+        status: "generating",
       });
 
-      startImageTask({
+      const startedAt = Date.now();
+      setIsSubmitting(true);
+      setActiveRequest({
         conversationId,
         turnId,
         mode: "edit",
         count: 1,
         variant: "selection-edit",
-        startedAt,
+      });
+      setSubmitElapsedSeconds(0);
+      setSubmitStartedAt(startedAt);
+      focusConversation(conversationId);
+      setImagePrompt("");
+      setSourceImages([]);
+      closeSelectionEditor();
+      try {
+        await updateConversation(conversationId, (current) => {
+          if (!current) {
+            return buildConversationBase(conversationId, draftTurn);
+          }
+          return {
+            ...current,
+            turns: [...(current.turns ?? []), draftTurn],
+          };
+        });
+
+        startImageTask({
+          conversationId,
+          turnId,
+          mode: "edit",
+          count: 1,
+          variant: "selection-edit",
+          startedAt,
+        });
+
+        let fallbackImageFile = sourceReference
+          ? null
+          : await dataUrlToFile(
+              editorTarget.sourceDataUrl,
+              editorTarget.imageName || "source.png",
+            );
+        let data;
+        try {
+          data = await editImage({
+            prompt,
+            images: fallbackImageFile ? [fallbackImageFile] : [],
+            mask: mask.file,
+            sourceReference,
+            model: imageModel,
+            imageRoute: imageRoutePreference,
+          });
+        } catch (error) {
+          if (!sourceReference || !shouldFallbackSelectionEdit(error)) {
+            throw error;
+          }
+          fallbackImageFile =
+            fallbackImageFile ??
+            (await dataUrlToFile(
+              editorTarget.sourceDataUrl,
+              editorTarget.imageName || "source.png",
+            ));
+          data = await editImage({
+            prompt,
+            images: [fallbackImageFile],
+            mask: mask.file,
+            model: imageModel,
+            imageRoute: imageRoutePreference,
+          });
+        }
+        const resultItems = mergeResultImages(turnId, data.data || [], 1);
+        const failedCount = countFailures(resultItems);
+
+        await updateConversation(conversationId, (current) => ({
+          ...(current ?? buildConversationBase(conversationId, draftTurn)),
+          turns: (current?.turns ?? [draftTurn]).map((turn) =>
+            turn.id === turnId
+              ? {
+                  ...turn,
+                  images: resultItems,
+                  status: failedCount > 0 ? "error" : "success",
+                  error:
+                    failedCount > 0
+                      ? `其中 ${failedCount} 张处理失败`
+                      : undefined,
+                }
+              : turn,
+          ),
+        }));
+
+        if (failedCount > 0) {
+          toast.error(`已返回结果，但有 ${failedCount} 张处理失败`);
+        } else {
+          toast.success("图片已按选区编辑");
+        }
+      } catch (error) {
+        const message = formatImageError(error);
+        await updateConversation(conversationId, (current) => ({
+          ...(current ?? buildConversationBase(conversationId, draftTurn)),
+          turns: (current?.turns ?? [draftTurn]).map((turn) =>
+            turn.id === turnId
+              ? {
+                  ...turn,
+                  status: "error",
+                  error: message,
+                  images: turn.images.map((image) => ({
+                    ...image,
+                    status: "error" as const,
+                    error: message,
+                  })),
+                }
+              : turn,
+          ),
+        }));
+        toast.error(message);
+      } finally {
+        finishImageTask(conversationId, turnId);
+        setIsSubmitting(false);
+        setActiveRequest(null);
+        setSubmitStartedAt(null);
+      }
+    },
+    [
+      closeSelectionEditor,
+      editorTarget,
+      focusConversation,
+      imageModel,
+      imageRoutePreference,
+      makeId,
+      setActiveRequest,
+      setImagePrompt,
+      setIsSubmitting,
+      setSourceImages,
+      setSubmitElapsedSeconds,
+      setSubmitStartedAt,
+      updateConversation,
+      upscaleScale,
+    ],
+  );
+
+  const handleRetryTurn = useCallback(
+    async (conversationId: string, turn: ImageConversationTurn) => {
+      if (isSubmitting) {
+        toast.error("正在处理中，请稍后再试");
+        return;
+      }
+
+      const prompt = turn.prompt?.trim() ?? "";
+      const turnMode = turn.mode || "generate";
+      const turnSourceImages = Array.isArray(turn.sourceImages)
+        ? turn.sourceImages
+        : [];
+      const turnImageSources = turnSourceImages.filter(
+        (item) => item.role === "image",
+      );
+      const turnMaskSource =
+        turnSourceImages.find((item) => item.role === "mask") ?? null;
+      const turnScale = turnMode === "upscale" ? turn.scale || "2x" : undefined;
+      const turnQuality = turn.quality || "high";
+      const turnImageRoute = turn.imageRoute || "auto";
+      const expectedCount = Math.max(1, turn.count || 1);
+
+      if (turnMode === "generate" && !prompt) {
+        toast.error("该记录缺少提示词，无法重试");
+        return;
+      }
+      if (
+        (turnMode === "edit" || turnMode === "upscale") &&
+        turnImageSources.length === 0
+      ) {
+        toast.error("该记录缺少源图，无法重试");
+        return;
+      }
+
+      const turnId = turn.id;
+      const now = new Date().toISOString();
+      const draftTurn = createConversationTurn({
+        turnId,
+        title: buildConversationTitle(
+          turnMode,
+          prompt,
+          turnScale || upscaleScale,
+        ),
+        mode: turnMode,
+        prompt,
+        systemPrompt: turn.systemPrompt,
+        model: turn.model,
+        count: expectedCount,
+        size: turn.size,
+        quality:
+          turnMode === "generate" && turnImageSources.length === 0
+            ? turnQuality
+            : undefined,
+        scale: turnScale,
+        imageRoute: turnImageRoute,
+        sourceImages: turnSourceImages,
+        images: createLoadingImages(expectedCount, turnId),
+        createdAt: now,
+        status: "generating",
       });
 
-      let fallbackImageFile = sourceReference
-        ? null
-        : await dataUrlToFile(editorTarget.sourceDataUrl, editorTarget.imageName || "source.png");
-      let data;
-      try {
-        data = await editImage({
-          prompt,
-          images: fallbackImageFile ? [fallbackImageFile] : [],
-          mask: mask.file,
-          sourceReference,
-          model: imageModel,
-          imageRoute: imageRoutePreference,
-        });
-      } catch (error) {
-        if (!sourceReference || !shouldFallbackSelectionEdit(error)) {
-          throw error;
-        }
-        fallbackImageFile =
-          fallbackImageFile ??
-          (await dataUrlToFile(editorTarget.sourceDataUrl, editorTarget.imageName || "source.png"));
-        data = await editImage({
-          prompt,
-          images: [fallbackImageFile],
-          mask: mask.file,
-          model: imageModel,
-          imageRoute: imageRoutePreference,
-        });
-      }
-      const resultItems = mergeResultImages(turnId, data.data || [], 1);
-      const failedCount = countFailures(resultItems);
-
-      await updateConversation(conversationId, (current) => ({
-        ...(current ?? buildConversationBase(conversationId, draftTurn)),
-        turns: (current?.turns ?? [draftTurn]).map((turn) =>
-          turn.id === turnId
-            ? {
-                ...turn,
-                images: resultItems,
-                status: failedCount > 0 ? "error" : "success",
-                error: failedCount > 0 ? `其中 ${failedCount} 张处理失败` : undefined,
-              }
-            : turn,
-        ),
-      }));
-
-      if (failedCount > 0) {
-        toast.error(`已返回结果，但有 ${failedCount} 张处理失败`);
-      } else {
-        toast.success("图片已按选区编辑");
-      }
-    } catch (error) {
-      const message = formatImageError(error);
-      await updateConversation(conversationId, (current) => ({
-        ...(current ?? buildConversationBase(conversationId, draftTurn)),
-        turns: (current?.turns ?? [draftTurn]).map((turn) =>
-          turn.id === turnId
-            ? {
-                ...turn,
-                status: "error",
-                error: message,
-                images: turn.images.map((image) => ({
-                  ...image,
-                  status: "error" as const,
-                  error: message,
-                })),
-              }
-            : turn,
-        ),
-      }));
-      toast.error(message);
-    } finally {
-      finishImageTask(conversationId, turnId);
-      setIsSubmitting(false);
-      setActiveRequest(null);
-      setSubmitStartedAt(null);
-    }
-  }, [
-    closeSelectionEditor,
-    editorTarget,
-    focusConversation,
-    imageModel,
-    imageRoutePreference,
-    makeId,
-    setActiveRequest,
-    setImagePrompt,
-    setIsSubmitting,
-    setSourceImages,
-    setSubmitElapsedSeconds,
-    setSubmitStartedAt,
-    updateConversation,
-    upscaleScale,
-  ]);
-
-  const handleRetryTurn = useCallback(async (conversationId: string, turn: ImageConversationTurn) => {
-    if (isSubmitting) {
-      toast.error("正在处理中，请稍后再试");
-      return;
-    }
-
-    const prompt = turn.prompt?.trim() ?? "";
-    const turnMode = turn.mode || "generate";
-    const turnSourceImages = Array.isArray(turn.sourceImages) ? turn.sourceImages : [];
-    const turnImageSources = turnSourceImages.filter((item) => item.role === "image");
-    const turnMaskSource = turnSourceImages.find((item) => item.role === "mask") ?? null;
-    const turnScale = turnMode === "upscale" ? turn.scale || "2x" : undefined;
-    const turnQuality = turn.quality || "high";
-    const turnImageRoute = turn.imageRoute || "auto";
-    const expectedCount = Math.max(1, turn.count || 1);
-
-    if (turnMode === "generate" && !prompt) {
-      toast.error("该记录缺少提示词，无法重试");
-      return;
-    }
-    if ((turnMode === "edit" || turnMode === "upscale") && turnImageSources.length === 0) {
-      toast.error("该记录缺少源图，无法重试");
-      return;
-    }
-
-    const turnId = turn.id;
-    const now = new Date().toISOString();
-    const draftTurn = createConversationTurn({
-      turnId,
-      title: buildConversationTitle(turnMode, prompt, turnScale || upscaleScale),
-      mode: turnMode,
-      prompt,
-      model: turn.model,
-      count: expectedCount,
-      size: turn.size,
-      quality: turnMode === "generate" && turnImageSources.length === 0 ? turnQuality : undefined,
-      scale: turnScale,
-      imageRoute: turnImageRoute,
-      sourceImages: turnSourceImages,
-      images: createLoadingImages(expectedCount, turnId),
-      createdAt: now,
-      status: "generating",
-    });
-
-    const startedAt = Date.now();
-    setIsSubmitting(true);
-    setActiveRequest({
-      conversationId,
-      turnId,
-      mode: turnMode,
-      count: expectedCount,
-      variant: "standard",
-    });
-    setSubmitElapsedSeconds(0);
-    setSubmitStartedAt(startedAt);
-    focusConversation(conversationId);
-    try {
-      await updateConversation(conversationId, (current) => ({
-        ...(current ?? buildConversationBase(conversationId, draftTurn)),
-        turns: current?.turns?.map((item) => (item.id === turnId ? draftTurn : item)) ?? [draftTurn],
-      }));
-
-      startImageTask({
+      const startedAt = Date.now();
+      setIsSubmitting(true);
+      setActiveRequest({
         conversationId,
         turnId,
         mode: turnMode,
         count: expectedCount,
         variant: "standard",
-        startedAt,
       });
+      setSubmitElapsedSeconds(0);
+      setSubmitStartedAt(startedAt);
+      focusConversation(conversationId);
+      try {
+        await updateConversation(conversationId, (current) => ({
+          ...(current ?? buildConversationBase(conversationId, draftTurn)),
+          turns: current?.turns?.map((item) =>
+            item.id === turnId ? draftTurn : item,
+          ) ?? [draftTurn],
+        }));
 
-      let resultItems: StoredImage[] = [];
-      if (turnMode === "generate") {
-        if (turnImageSources.length > 0) {
-          const files = await Promise.all(
-            turnImageSources.map((item, index) => dataUrlToFile(item.dataUrl, item.name || `reference-${index + 1}.png`)),
-          );
-          const data = await editImage({ prompt, images: files, size: turn.size, model: turn.model, imageRoute: turnImageRoute });
-          resultItems = mergeResultImages(turnId, data.data || [], 1);
-        } else {
-          const data = await generateImageViaTask(prompt, {
-            model: turn.model,
-            count: expectedCount,
-            size: turn.size,
-            quality: turnQuality,
-            imageRoute: turnImageRoute,
-          });
-          resultItems = mergeResultImages(turnId, data.data || [], expectedCount);
+        startImageTask({
+          conversationId,
+          turnId,
+          mode: turnMode,
+          count: expectedCount,
+          variant: "standard",
+          startedAt,
+        });
+
+        let resultItems: StoredImage[] = [];
+        if (turnMode === "generate") {
+          if (turnImageSources.length > 0) {
+            const files = await Promise.all(
+              turnImageSources.map((item, index) =>
+                dataUrlToFile(
+                  item.dataUrl,
+                  item.name || `reference-${index + 1}.png`,
+                ),
+              ),
+            );
+            const data = await editImage({
+              prompt,
+              images: files,
+              size: turn.size,
+              model: turn.model,
+              imageRoute: turnImageRoute,
+              systemPrompt: turn.systemPrompt,
+            });
+            resultItems = mergeResultImages(turnId, data.data || [], 1);
+          } else {
+            const data = await generateImageViaTask(prompt, {
+              model: turn.model,
+              count: expectedCount,
+              size: turn.size,
+              quality: turnQuality,
+              imageRoute: turnImageRoute,
+              systemPrompt: turn.systemPrompt,
+              onTaskCreated: async (taskId) => {
+                startImageTask({
+                  conversationId,
+                  turnId,
+                  mode: turnMode,
+                  count: expectedCount,
+                  variant: "standard",
+                  startedAt,
+                  taskId,
+                });
+                await updateConversation(conversationId, (current) => ({
+                  ...(current ??
+                    buildConversationBase(conversationId, draftTurn)),
+                  turns: (current?.turns ?? [draftTurn]).map((item) =>
+                    item.id === turnId ? { ...item, taskId } : item,
+                  ),
+                }));
+              },
+            });
+            resultItems = mergeResultImages(
+              turnId,
+              data.data || [],
+              expectedCount,
+            );
+          }
         }
-      }
 
-      if (turnMode === "edit") {
-        const files = await Promise.all(
-          turnImageSources.map((item, index) => dataUrlToFile(item.dataUrl, item.name || `image-${index + 1}.png`)),
-        );
-        const mask = turnMaskSource ? await dataUrlToFile(turnMaskSource.dataUrl, turnMaskSource.name || "mask.png") : null;
-        const data = await editImage({ prompt, images: files, mask, size: turn.size, model: turn.model, imageRoute: turnImageRoute });
-        resultItems = mergeResultImages(turnId, data.data || [], 1);
-      }
+        if (turnMode === "edit") {
+          const files = await Promise.all(
+            turnImageSources.map((item, index) =>
+              dataUrlToFile(
+                item.dataUrl,
+                item.name || `image-${index + 1}.png`,
+              ),
+            ),
+          );
+          const mask = turnMaskSource
+            ? await dataUrlToFile(
+                turnMaskSource.dataUrl,
+                turnMaskSource.name || "mask.png",
+              )
+            : null;
+          const data = await editImage({
+            prompt,
+            images: files,
+            mask,
+            size: turn.size,
+            model: turn.model,
+            imageRoute: turnImageRoute,
+            systemPrompt: turn.systemPrompt,
+          });
+          resultItems = mergeResultImages(turnId, data.data || [], 1);
+        }
 
-      if (turnMode === "upscale") {
-        const file = await dataUrlToFile(turnImageSources[0].dataUrl, turnImageSources[0].name || "upscale.png");
-        const data = await upscaleImage({ image: file, prompt, scale: turnScale || "2x", model: turn.model, imageRoute: turnImageRoute });
-        resultItems = mergeResultImages(turnId, data.data || [], 1);
-      }
+        if (turnMode === "upscale") {
+          const file = await dataUrlToFile(
+            turnImageSources[0].dataUrl,
+            turnImageSources[0].name || "upscale.png",
+          );
+          const data = await upscaleImage({
+            image: file,
+            prompt,
+            scale: turnScale || "2x",
+            model: turn.model,
+            imageRoute: turnImageRoute,
+            systemPrompt: turn.systemPrompt,
+          });
+          resultItems = mergeResultImages(turnId, data.data || [], 1);
+        }
 
-      const failedCount = countFailures(resultItems);
-      await updateConversation(conversationId, (current) => ({
-        ...(current ?? buildConversationBase(conversationId, draftTurn)),
-        turns: (current?.turns ?? [draftTurn]).map((item) =>
-          item.id === turnId
-            ? {
-                ...item,
-                images: resultItems,
-                status: failedCount > 0 ? "error" : "success",
-                error: failedCount > 0 ? `其中 ${failedCount} 张处理失败` : undefined,
-              }
-            : item,
-        ),
-      }));
+        const failedCount = countFailures(resultItems);
+        await updateConversation(conversationId, (current) => ({
+          ...(current ?? buildConversationBase(conversationId, draftTurn)),
+          turns: (current?.turns ?? [draftTurn]).map((item) =>
+            item.id === turnId
+              ? {
+                  ...item,
+                  images: resultItems,
+                  status: failedCount > 0 ? "error" : "success",
+                  error:
+                    failedCount > 0
+                      ? `其中 ${failedCount} 张处理失败`
+                      : undefined,
+                }
+              : item,
+          ),
+        }));
 
-      if (failedCount > 0) {
-        toast.error(`已返回结果，但有 ${failedCount} 张处理失败`);
-      } else {
-        toast.success(turnMode === "generate" ? "图片已生成" : turnMode === "edit" ? "图片已编辑" : "图片已放大");
-      }
-    } catch (error) {
-      const message = formatImageError(error);
-      await updateConversation(conversationId, (current) => ({
-        ...(current ?? buildConversationBase(conversationId, draftTurn)),
-        turns: (current?.turns ?? [draftTurn]).map((item) =>
-          item.id === turnId
-            ? {
-                ...item,
-                status: "error",
-                error: message,
-                images: item.images.map((image) => ({
-                  ...image,
-                  status: "error" as const,
+        if (failedCount > 0) {
+          toast.error(`已返回结果，但有 ${failedCount} 张处理失败`);
+        } else {
+          toast.success(
+            turnMode === "generate"
+              ? "图片已生成"
+              : turnMode === "edit"
+                ? "图片已编辑"
+                : "图片已放大",
+          );
+        }
+      } catch (error) {
+        const message = formatImageError(error);
+        await updateConversation(conversationId, (current) => ({
+          ...(current ?? buildConversationBase(conversationId, draftTurn)),
+          turns: (current?.turns ?? [draftTurn]).map((item) =>
+            item.id === turnId
+              ? {
+                  ...item,
+                  status: "error",
                   error: message,
-                })),
-              }
-            : item,
-        ),
-      }));
-      toast.error(message);
-    } finally {
-      finishImageTask(conversationId, turnId);
-      setIsSubmitting(false);
-      setActiveRequest(null);
-      setSubmitStartedAt(null);
-    }
-  }, [focusConversation, isSubmitting, setActiveRequest, setIsSubmitting, setSubmitElapsedSeconds, setSubmitStartedAt, updateConversation, upscaleScale]);
+                  images: item.images.map((image) => ({
+                    ...image,
+                    status: "error" as const,
+                    error: message,
+                  })),
+                }
+              : item,
+          ),
+        }));
+        toast.error(message);
+      } finally {
+        finishImageTask(conversationId, turnId);
+        setIsSubmitting(false);
+        setActiveRequest(null);
+        setSubmitStartedAt(null);
+      }
+    },
+    [
+      focusConversation,
+      isSubmitting,
+      setActiveRequest,
+      setIsSubmitting,
+      setSubmitElapsedSeconds,
+      setSubmitStartedAt,
+      updateConversation,
+      upscaleScale,
+    ],
+  );
 
   const handleSubmit = useCallback(async () => {
     const prompt = imagePrompt.trim();
+    const trimmedSystemPrompt = systemPrompt.trim();
     if (mode === "generate" && !prompt) {
       toast.error("请输入提示词");
       return;
@@ -513,16 +640,21 @@ export function useImageSubmit({
     const conversationId = selectedConversationId ?? makeId();
     const turnId = makeId();
     const now = new Date().toISOString();
-    const expectedCount = mode === "generate" && imageSources.length === 0 ? parsedCount : 1;
+    const expectedCount =
+      mode === "generate" && imageSources.length === 0 ? parsedCount : 1;
     const draftTurn = createConversationTurn({
       turnId,
       title: buildConversationTitle(mode, prompt, upscaleScale),
       mode,
       prompt,
+      systemPrompt: trimmedSystemPrompt || undefined,
       model: imageModel,
       count: expectedCount,
       size: mode === "generate" || mode === "edit" ? imageSize : undefined,
-      quality: mode === "generate" && imageSources.length === 0 ? imageQuality : undefined,
+      quality:
+        mode === "generate" && imageSources.length === 0
+          ? imageQuality
+          : undefined,
       scale: mode === "upscale" ? upscaleScale : undefined,
       imageRoute: imageRoutePreference,
       sourceImages,
@@ -544,6 +676,7 @@ export function useImageSubmit({
     setSubmitStartedAt(startedAt);
     focusConversation(conversationId);
     setImagePrompt("");
+    setSystemPrompt("");
     setSourceImages([]);
     try {
       if (selectedConversationId) {
@@ -552,7 +685,9 @@ export function useImageSubmit({
           turns: [...(current?.turns ?? []), draftTurn],
         }));
       } else {
-        await persistConversation(buildConversationBase(conversationId, draftTurn));
+        await persistConversation(
+          buildConversationBase(conversationId, draftTurn),
+        );
       }
 
       startImageTask({
@@ -568,9 +703,21 @@ export function useImageSubmit({
       if (mode === "generate") {
         if (imageSources.length > 0) {
           const files = await Promise.all(
-            imageSources.map((item, index) => dataUrlToFile(item.dataUrl, item.name || `reference-${index + 1}.png`)),
+            imageSources.map((item, index) =>
+              dataUrlToFile(
+                item.dataUrl,
+                item.name || `reference-${index + 1}.png`,
+              ),
+            ),
           );
-          const data = await editImage({ prompt, images: files, size: imageSize, model: imageModel, imageRoute: imageRoutePreference });
+          const data = await editImage({
+            prompt,
+            images: files,
+            size: imageSize,
+            model: imageModel,
+            imageRoute: imageRoutePreference,
+            systemPrompt: trimmedSystemPrompt,
+          });
           resultItems = mergeResultImages(turnId, data.data || [], 1);
         } else {
           const data = await generateImageViaTask(prompt, {
@@ -579,6 +726,25 @@ export function useImageSubmit({
             size: imageSize,
             quality: imageQuality,
             imageRoute: imageRoutePreference,
+            systemPrompt: trimmedSystemPrompt,
+            onTaskCreated: async (taskId) => {
+              startImageTask({
+                conversationId,
+                turnId,
+                mode,
+                count: expectedCount,
+                variant: "standard",
+                startedAt,
+                taskId,
+              });
+              await updateConversation(conversationId, (current) => ({
+                ...(current ??
+                  buildConversationBase(conversationId, draftTurn)),
+                turns: (current?.turns ?? [draftTurn]).map((turn) =>
+                  turn.id === turnId ? { ...turn, taskId } : turn,
+                ),
+              }));
+            },
           });
           resultItems = mergeResultImages(turnId, data.data || [], parsedCount);
         }
@@ -586,16 +752,41 @@ export function useImageSubmit({
 
       if (mode === "edit") {
         const files = await Promise.all(
-          imageSources.map((item, index) => dataUrlToFile(item.dataUrl, item.name || `image-${index + 1}.png`)),
+          imageSources.map((item, index) =>
+            dataUrlToFile(item.dataUrl, item.name || `image-${index + 1}.png`),
+          ),
         );
-        const mask = maskSource ? await dataUrlToFile(maskSource.dataUrl, maskSource.name || "mask.png") : null;
-        const data = await editImage({ prompt, images: files, mask, size: imageSize, model: imageModel, imageRoute: imageRoutePreference });
+        const mask = maskSource
+          ? await dataUrlToFile(
+              maskSource.dataUrl,
+              maskSource.name || "mask.png",
+            )
+          : null;
+        const data = await editImage({
+          prompt,
+          images: files,
+          mask,
+          size: imageSize,
+          model: imageModel,
+          imageRoute: imageRoutePreference,
+          systemPrompt: trimmedSystemPrompt,
+        });
         resultItems = mergeResultImages(turnId, data.data || [], 1);
       }
 
       if (mode === "upscale") {
-        const file = await dataUrlToFile(imageSources[0].dataUrl, imageSources[0].name || "upscale.png");
-        const data = await upscaleImage({ image: file, prompt, scale: upscaleScale, model: imageModel, imageRoute: imageRoutePreference });
+        const file = await dataUrlToFile(
+          imageSources[0].dataUrl,
+          imageSources[0].name || "upscale.png",
+        );
+        const data = await upscaleImage({
+          image: file,
+          prompt,
+          scale: upscaleScale,
+          model: imageModel,
+          imageRoute: imageRoutePreference,
+          systemPrompt: trimmedSystemPrompt,
+        });
         resultItems = mergeResultImages(turnId, data.data || [], 1);
       }
 
@@ -608,7 +799,10 @@ export function useImageSubmit({
                 ...turn,
                 images: resultItems,
                 status: failedCount > 0 ? "error" : "success",
-                error: failedCount > 0 ? `其中 ${failedCount} 张处理失败` : undefined,
+                error:
+                  failedCount > 0
+                    ? `其中 ${failedCount} 张处理失败`
+                    : undefined,
               }
             : turn,
         ),
@@ -660,6 +854,7 @@ export function useImageSubmit({
     imagePrompt,
     imageRoutePreference,
     imageSources,
+    systemPrompt,
     makeId,
     maskSource,
     mode,
@@ -671,6 +866,7 @@ export function useImageSubmit({
     selectedConversationId,
     setActiveRequest,
     setImagePrompt,
+    setSystemPrompt,
     setIsSubmitting,
     setSourceImages,
     setSubmitElapsedSeconds,

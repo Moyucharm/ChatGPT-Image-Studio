@@ -17,13 +17,14 @@ import (
 )
 
 type cpaImageClient struct {
-	baseURL       string
-	apiKey        string
-	httpClient    *http.Client
-	routeStrategy string
-	lastRoute     string
-	lastModel     string
-	lastToolModel string
+	baseURL               string
+	apiKey                string
+	httpClient            *http.Client
+	routeStrategy         string
+	lastRoute             string
+	lastModel             string
+	lastToolModel         string
+	responsesInstructions string
 }
 
 const maxCPAResponsesSSELineBytes = 128 << 20
@@ -61,6 +62,15 @@ func (c *cpaImageClient) ImageToolModel() string {
 		return ""
 	}
 	return strings.TrimSpace(c.lastToolModel)
+}
+
+func (c *cpaImageClient) SetResponsesInstructions(instructions string) {
+	if c == nil {
+		return
+	}
+	if trimmed := strings.TrimSpace(instructions); trimmed != "" {
+		c.responsesInstructions = trimmed
+	}
 }
 
 func (c *cpaImageClient) DownloadBytes(url string) ([]byte, error) {
@@ -447,7 +457,7 @@ func (c *cpaImageClient) buildResponsesRequest(prompt string, images [][]byte, m
 	}
 
 	return map[string]any{
-		"instructions":        "",
+		"instructions":        strings.TrimSpace(c.responsesInstructions),
 		"stream":              true,
 		"reasoning":           map[string]any{"effort": "medium", "summary": "auto"},
 		"parallel_tool_calls": true,

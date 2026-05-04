@@ -1,6 +1,11 @@
 "use client";
 
-import type { InpaintSourceReference, ImageModel, ImageQuality, ImageRoutePreference } from "@/lib/api";
+import type {
+  InpaintSourceReference,
+  ImageModel,
+  ImageQuality,
+  ImageRoutePreference,
+} from "@/lib/api";
 import type {
   ImageConversationTurn,
   ImageMode,
@@ -8,9 +13,14 @@ import type {
   StoredSourceImage,
 } from "@/store/image-conversations";
 
-export function buildConversationTitle(mode: ImageMode, prompt: string, scale: string) {
+export function buildConversationTitle(
+  mode: ImageMode,
+  prompt: string,
+  scale: string,
+) {
   const trimmed = prompt.trim();
-  const prefix = mode === "generate" ? "生成" : mode === "edit" ? "编辑" : `放大 ${scale}`;
+  const prefix =
+    mode === "generate" ? "生成" : mode === "edit" ? "编辑" : `放大 ${scale}`;
   if (!trimmed) {
     return prefix;
   }
@@ -29,9 +39,11 @@ export function createLoadingImages(count: number, conversationId: string) {
 
 export function createConversationTurn(payload: {
   turnId: string;
+  taskId?: string;
   title: string;
   mode: ImageMode;
   prompt: string;
+  systemPrompt?: string;
   model: ImageModel;
   count: number;
   size?: string;
@@ -46,9 +58,11 @@ export function createConversationTurn(payload: {
 }): ImageConversationTurn {
   return {
     id: payload.turnId,
+    taskId: payload.taskId?.trim() || undefined,
     title: payload.title,
     mode: payload.mode,
     prompt: payload.prompt,
+    systemPrompt: payload.systemPrompt?.trim() || undefined,
     model: payload.model,
     count: payload.count,
     size: payload.size,
@@ -129,10 +143,15 @@ export function formatImageErrorMessage(message: string) {
       "提示词内容过多，或当前分辨率/质量组合过高。",
       "建议减少提示词内容，或降低分辨率、质量后重试。",
       requestId ? `请求 ID：${requestId}` : "",
-    ].filter(Boolean).join("\n");
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
 
-  if (normalized.includes("no images generated") && normalized.includes("model may have refused")) {
+  if (
+    normalized.includes("no images generated") &&
+    normalized.includes("model may have refused")
+  ) {
     return "没有生成图片，模型可能检测到敏感内容，拒绝了这次请求，建议重试或调整提示词。";
   }
 
@@ -155,10 +174,14 @@ export function formatImageErrorMessage(message: string) {
 }
 
 export function formatImageError(error: unknown) {
-  return formatImageErrorMessage(error instanceof Error ? error.message : String(error || "处理图片失败"));
+  return formatImageErrorMessage(
+    error instanceof Error ? error.message : String(error || "处理图片失败"),
+  );
 }
 
-export function buildInpaintSourceReference(image: StoredImage): InpaintSourceReference | undefined {
+export function buildInpaintSourceReference(
+  image: StoredImage,
+): InpaintSourceReference | undefined {
   if (!image.file_id || !image.gen_id || !image.source_account_id) {
     return undefined;
   }
@@ -181,11 +204,19 @@ function extractErrorCode(error: unknown) {
 
 export function shouldFallbackSelectionEdit(error: unknown) {
   const code = extractErrorCode(error);
-  if (["source_account_not_found", "source_account_unavailable", "source_context_missing"].includes(code)) {
+  if (
+    [
+      "source_account_not_found",
+      "source_account_unavailable",
+      "source_context_missing",
+    ].includes(code)
+  ) {
     return true;
   }
 
-  const normalized = (error instanceof Error ? error.message : String(error || "")).toLowerCase();
+  const normalized = (
+    error instanceof Error ? error.message : String(error || "")
+  ).toLowerCase();
   return (
     normalized.includes("conversation not found") ||
     normalized.includes("source account") ||

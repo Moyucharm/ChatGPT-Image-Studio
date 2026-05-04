@@ -30,9 +30,11 @@ export type ImageConversationStatus = "generating" | "success" | "error";
 
 export type ImageConversationTurn = {
   id: string;
+  taskId?: string;
   title: string;
   mode: ImageMode;
   prompt: string;
+  systemPrompt?: string;
   model: ImageModel;
   count: number;
   size?: string;
@@ -51,6 +53,7 @@ export type ImageConversation = {
   title: string;
   mode: ImageMode;
   prompt: string;
+  systemPrompt?: string;
   model: ImageModel;
   count: number;
   size?: string;
@@ -88,7 +91,9 @@ async function loadConversationCache(): Promise<ImageConversation[]> {
     loadPromise = imageConversationStorage
       .getItem<ImageConversation[]>(IMAGE_CONVERSATIONS_KEY)
       .then((items) => {
-        cachedConversations = sortConversations((items || []).map(normalizeConversation));
+        cachedConversations = sortConversations(
+          (items || []).map(normalizeConversation),
+        );
         return cachedConversations;
       })
       .finally(() => {
@@ -99,7 +104,9 @@ async function loadConversationCache(): Promise<ImageConversation[]> {
   return loadPromise;
 }
 
-export function getCachedImageConversationsSnapshot(): ImageConversation[] | null {
+export function getCachedImageConversationsSnapshot():
+  | ImageConversation[]
+  | null {
   if (!cachedConversations) {
     return null;
   }
@@ -107,7 +114,9 @@ export function getCachedImageConversationsSnapshot(): ImageConversation[] | nul
 }
 
 async function persistConversationCache() {
-  const snapshot = sortConversations((cachedConversations || []).map(normalizeConversation));
+  const snapshot = sortConversations(
+    (cachedConversations || []).map(normalizeConversation),
+  );
   cachedConversations = snapshot;
   writeQueue = writeQueue.then(async () => {
     await imageConversationStorage.setItem(IMAGE_CONVERSATIONS_KEY, snapshot);
@@ -116,7 +125,11 @@ async function persistConversationCache() {
 }
 
 function normalizeStoredImage(image: StoredImage): StoredImage {
-  if (image.status === "loading" || image.status === "error" || image.status === "success") {
+  if (
+    image.status === "loading" ||
+    image.status === "error" ||
+    image.status === "success"
+  ) {
     return image;
   }
   return {
@@ -125,18 +138,33 @@ function normalizeStoredImage(image: StoredImage): StoredImage {
   };
 }
 
-function normalizeImageQuality(value: ImageConversationTurn["quality"]): ImageQuality | undefined {
-  return value === "low" || value === "medium" || value === "high" ? value : undefined;
+function normalizeImageQuality(
+  value: ImageConversationTurn["quality"],
+): ImageQuality | undefined {
+  return value === "low" || value === "medium" || value === "high"
+    ? value
+    : undefined;
 }
 
-function normalizeImageRoute(value: ImageConversationTurn["imageRoute"]): ImageRoutePreference {
+function normalizeImageRoute(
+  value: ImageConversationTurn["imageRoute"],
+): ImageRoutePreference {
   return value === "legacy" || value === "responses" ? value : "auto";
+}
+
+function normalizeSystemPrompt(
+  value: ImageConversationTurn["systemPrompt"],
+): string | undefined {
+  const trimmed = String(value || "").trim();
+  return trimmed || undefined;
 }
 
 function normalizeTurn(turn: ImageConversationTurn): ImageConversationTurn {
   return {
     ...turn,
+    taskId: String(turn.taskId || "").trim() || undefined,
     mode: turn.mode || "generate",
+    systemPrompt: normalizeSystemPrompt(turn.systemPrompt),
     quality: normalizeImageQuality(turn.quality),
     imageRoute: normalizeImageRoute(turn.imageRoute),
     sourceImages: Array.isArray(turn.sourceImages) ? turn.sourceImages : [],
@@ -144,7 +172,9 @@ function normalizeTurn(turn: ImageConversationTurn): ImageConversationTurn {
   };
 }
 
-export function normalizeConversation(conversation: ImageConversation): ImageConversation {
+export function normalizeConversation(
+  conversation: ImageConversation,
+): ImageConversation {
   const turns =
     Array.isArray(conversation.turns) && conversation.turns.length > 0
       ? conversation.turns.map(normalizeTurn)
@@ -154,6 +184,7 @@ export function normalizeConversation(conversation: ImageConversation): ImageCon
             title: conversation.title,
             mode: conversation.mode || "generate",
             prompt: conversation.prompt,
+            systemPrompt: conversation.systemPrompt,
             model: conversation.model,
             count: conversation.count,
             size: conversation.size,
@@ -174,6 +205,7 @@ export function normalizeConversation(conversation: ImageConversation): ImageCon
     title: latestTurn.title,
     mode: latestTurn.mode,
     prompt: latestTurn.prompt,
+    systemPrompt: latestTurn.systemPrompt,
     model: latestTurn.model,
     count: latestTurn.count,
     size: latestTurn.size,
@@ -194,12 +226,16 @@ export async function listImageConversations(): Promise<ImageConversation[]> {
   return sortConversations(items.map(normalizeConversation));
 }
 
-export async function getImageConversation(id: string): Promise<ImageConversation | null> {
+export async function getImageConversation(
+  id: string,
+): Promise<ImageConversation | null> {
   const items = await loadConversationCache();
   return items.find((item) => item.id === id) ?? null;
 }
 
-export async function saveImageConversation(conversation: ImageConversation): Promise<void> {
+export async function saveImageConversation(
+  conversation: ImageConversation,
+): Promise<void> {
   const items = await loadConversationCache();
   cachedConversations = sortConversations([
     normalizeConversation(conversation),
@@ -215,7 +251,10 @@ export async function updateImageConversation(
   const items = await loadConversationCache();
   const current = items.find((item) => item.id === id) ?? null;
   const nextConversation = normalizeConversation(updater(current));
-  cachedConversations = sortConversations([nextConversation, ...items.filter((item) => item.id !== id)]);
+  cachedConversations = sortConversations([
+    nextConversation,
+    ...items.filter((item) => item.id !== id),
+  ]);
   await persistConversationCache();
   return nextConversation;
 }

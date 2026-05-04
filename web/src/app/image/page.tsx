@@ -5,7 +5,12 @@ import "react-medium-image-zoom/dist/styles.css";
 import { ChevronsDown, PanelLeftOpen } from "lucide-react";
 
 import { ImageEditModal } from "@/components/image-edit-modal";
-import { fetchImageBootstrap, type ImageQuality, type ImageRoutePreference } from "@/lib/api";
+import {
+  fetchImageGenerationTask,
+  fetchImageBootstrap,
+  type ImageQuality,
+  type ImageRoutePreference,
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   normalizeConversation,
@@ -14,7 +19,13 @@ import {
   type ImageConversation,
   type ImageMode,
 } from "@/store/image-conversations";
-import { isImageTaskActive, listActiveImageTasks, subscribeImageTasks } from "@/store/image-active-tasks";
+import {
+  finishImageTask,
+  isImageTaskActive,
+  listActiveImageTasks,
+  startImageTask,
+  subscribeImageTasks,
+} from "@/store/image-active-tasks";
 import { ConversationTurns } from "./components/conversation-turns";
 import { EmptyState } from "./components/empty-state";
 import { HistorySidebar } from "./components/history-sidebar";
@@ -23,9 +34,17 @@ import { WorkspaceHeader } from "./components/workspace-header";
 import { useImageHistory } from "./hooks/use-image-history";
 import { useImageSourceInputs } from "./hooks/use-image-source-inputs";
 import { useImageSubmit } from "./hooks/use-image-submit";
+import { countFailures, mergeResultImages } from "./submit-utils";
 import { buildConversationPreviewSource } from "./view-utils";
 
-type ImageAspectRatio = "auto" | "1:1" | "4:3" | "3:2" | "16:9" | "21:9" | "9:16";
+type ImageAspectRatio =
+  | "auto"
+  | "1:1"
+  | "4:3"
+  | "3:2"
+  | "16:9"
+  | "21:9"
+  | "9:16";
 type ImageResolutionTier = "sd" | "2k" | "4k";
 type ImageResolutionAccess = "free" | "paid";
 type ImageResolutionPreset = {
@@ -35,7 +54,10 @@ type ImageResolutionPreset = {
   access: ImageResolutionAccess;
 };
 
-const imageAspectRatioOptions: Array<{ label: string; value: ImageAspectRatio }> = [
+const imageAspectRatioOptions: Array<{
+  label: string;
+  value: ImageAspectRatio;
+}> = [
   { label: "Auto", value: "auto" },
   { label: "1:1", value: "1:1" },
   { label: "4:3", value: "4:3" },
@@ -45,14 +67,20 @@ const imageAspectRatioOptions: Array<{ label: string; value: ImageAspectRatio }>
   { label: "9:16", value: "9:16" },
 ];
 
-const imageResolutionPresets: Record<ImageAspectRatio, ImageResolutionPreset[]> = {
-  auto: [
-    { tier: "sd", label: "Auto 智能匹配", value: "auto", access: "free" },
-  ],
+const imageResolutionPresets: Record<
+  ImageAspectRatio,
+  ImageResolutionPreset[]
+> = {
+  auto: [{ tier: "sd", label: "Auto 智能匹配", value: "auto", access: "free" }],
   "1:1": [
     { tier: "sd", label: "Free 实际档", value: "1248x1248", access: "free" },
     { tier: "2k", label: "Paid 2K", value: "2048x2048", access: "paid" },
-    { tier: "4k", label: "Paid 高像素上限", value: "2880x2880", access: "paid" },
+    {
+      tier: "4k",
+      label: "Paid 高像素上限",
+      value: "2880x2880",
+      access: "paid",
+    },
   ],
   "4:3": [
     { tier: "sd", label: "Free 实际档", value: "1440x1072", access: "free" },
@@ -81,17 +109,38 @@ const imageResolutionPresets: Record<ImageAspectRatio, ImageResolutionPreset[]> 
   ],
 };
 
-const modeOptions: Array<{ label: string; value: ImageMode; description: string }> = [
-  { label: "生成", value: "generate", description: "提示词生成新图，也可上传参考图辅助生成" },
+const modeOptions: Array<{
+  label: string;
+  value: ImageMode;
+  description: string;
+}> = [
+  {
+    label: "生成",
+    value: "generate",
+    description: "提示词生成新图，也可上传参考图辅助生成",
+  },
   { label: "编辑", value: "edit", description: "上传图像后局部或整体改图" },
   { label: "放大", value: "upscale", description: "提升清晰度并放大细节" },
 ];
 
 const upscaleOptions = ["2x", "4x"];
-const imageQualityOptions: Array<{ label: string; value: ImageQuality; description: string }> = [
+const imageGenerationTaskPollIntervalMs = 2500;
+const imageQualityOptions: Array<{
+  label: string;
+  value: ImageQuality;
+  description: string;
+}> = [
   { label: "Low", value: "low", description: "低质量，速度更快，适合草稿测试" },
-  { label: "Medium", value: "medium", description: "均衡质量与速度，适合日常生成" },
-  { label: "High", value: "high", description: "高质量，耗时更长，适合最终出图" },
+  {
+    label: "Medium",
+    value: "medium",
+    description: "均衡质量与速度，适合日常生成",
+  },
+  {
+    label: "High",
+    value: "high",
+    description: "高质量，耗时更长，适合最终出图",
+  },
 ];
 
 const modeLabelMap: Record<ImageMode, string> = {
@@ -175,12 +224,17 @@ async function normalizeConversationHistory(items: ImageConversation[]) {
   const normalized = items.map((item) => {
     let changed = false;
     const turns = (item.turns ?? []).map((turn) => {
+      if (turn.status === "generating" && turn.taskId) {
+        return turn;
+      }
       if (turn.status !== "generating" || isImageTaskActive(item.id, turn.id)) {
         return turn;
       }
 
       changed = true;
-      const errorMessage = turn.images.some((image) => image.status === "success")
+      const errorMessage = turn.images.some(
+        (image) => image.status === "success",
+      )
         ? turn.error || "任务已中断"
         : "页面已刷新，任务已中断";
 
@@ -228,6 +282,10 @@ function makeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 function formatProcessingDuration(totalSeconds: number) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
@@ -269,18 +327,27 @@ function buildProcessingStatus(
   if (mode === "edit") {
     if (elapsedSeconds < 4) {
       return {
-        title: variant === "selection-edit" ? "正在提交选区编辑" : "正在提交编辑请求",
+        title:
+          variant === "selection-edit"
+            ? "正在提交选区编辑"
+            : "正在提交编辑请求",
         detail: "请求已发送，正在准备处理素材",
       };
     }
     if (elapsedSeconds < 12) {
       return {
-        title: variant === "selection-edit" ? "正在上传源图和选区" : "正在上传编辑素材",
+        title:
+          variant === "selection-edit"
+            ? "正在上传源图和选区"
+            : "正在上传编辑素材",
         detail: "素材上传完成后会立即进入改图阶段",
       };
     }
     return {
-      title: variant === "selection-edit" ? "模型正在按选区修改图片" : "模型正在编辑图片",
+      title:
+        variant === "selection-edit"
+          ? "模型正在按选区修改图片"
+          : "模型正在编辑图片",
       detail: "通常需要 20 到 90 秒，请保持页面开启",
     };
   }
@@ -312,49 +379,68 @@ export default function ImagePage() {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const resultsViewportRef = useRef<HTMLDivElement | null>(null);
   const isNearBottomRef = useRef(true);
+  const recoveringTaskKeysRef = useRef(new Set<string>());
   const previousSelectedConversationIdRef = useRef<string | null>(null);
   const previousTurnCountRef = useRef(0);
   const previousLastTurnKeyRef = useRef("");
 
   const [mode, setMode] = useState<ImageMode>("generate");
   const [imagePrompt, setImagePrompt] = useState("");
+  const [systemPrompt, setSystemPrompt] = useState("");
+  const [activePromptKind, setActivePromptKind] = useState<"user" | "system">(
+    "user",
+  );
   const [imageCount, setImageCount] = useState("1");
-  const [imageAspectRatio, setImageAspectRatio] = useState<ImageAspectRatio>("auto");
-  const [imageResolutionTier, setImageResolutionTier] = useState<ImageResolutionTier>("sd");
+  const [imageAspectRatio, setImageAspectRatio] =
+    useState<ImageAspectRatio>("auto");
+  const [imageResolutionTier, setImageResolutionTier] =
+    useState<ImageResolutionTier>("sd");
   const [imageQuality, setImageQuality] = useState<ImageQuality>("high");
-  const [imageRoutePreference, setImageRoutePreference] = useState<ImageRoutePreference>("auto");
+  const [imageRoutePreference, setImageRoutePreference] =
+    useState<ImageRoutePreference>("auto");
   const [upscaleScale, setUpscaleScale] = useState("2x");
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [availableQuota, setAvailableQuota] = useState("加载中");
   const [hasAvailablePaidAccount, setHasAvailablePaidAccount] = useState(false);
-  const [activeRequest, setActiveRequest] = useState<ActiveRequestState | null>(null);
+  const [activeRequest, setActiveRequest] = useState<ActiveRequestState | null>(
+    null,
+  );
   const [submitStartedAt, setSubmitStartedAt] = useState<number | null>(null);
   const [submitElapsedSeconds, setSubmitElapsedSeconds] = useState(0);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
-  const syncRuntimeTaskState = useCallback((preferredConversationId?: string | null) => {
-    const tasks = listActiveImageTasks();
-    const nextTask =
-      tasks.find((task) => preferredConversationId && task.conversationId === preferredConversationId) ?? tasks[0] ?? null;
+  const syncRuntimeTaskState = useCallback(
+    (preferredConversationId?: string | null) => {
+      const tasks = listActiveImageTasks();
+      const nextTask =
+        tasks.find(
+          (task) =>
+            preferredConversationId &&
+            task.conversationId === preferredConversationId,
+        ) ??
+        tasks[0] ??
+        null;
 
-    setIsSubmitting(tasks.length > 0);
-    setActiveRequest(
-      nextTask
-        ? {
-            conversationId: nextTask.conversationId,
-            turnId: nextTask.turnId,
-            mode: nextTask.mode,
-            count: nextTask.count,
-            variant: nextTask.variant,
-          }
-        : null,
-    );
-    setSubmitStartedAt(nextTask?.startedAt ?? null);
-    if (!nextTask) {
-      setSubmitElapsedSeconds(0);
-    }
-  }, []);
+      setIsSubmitting(tasks.length > 0);
+      setActiveRequest(
+        nextTask
+          ? {
+              conversationId: nextTask.conversationId,
+              turnId: nextTask.turnId,
+              mode: nextTask.mode,
+              count: nextTask.count,
+              variant: nextTask.variant,
+            }
+          : null,
+      );
+      setSubmitStartedAt(nextTask?.startedAt ?? null);
+      if (!nextTask) {
+        setSubmitElapsedSeconds(0);
+      }
+    },
+    [],
+  );
 
   const {
     conversations,
@@ -395,7 +481,8 @@ export default function ImagePage() {
   });
 
   const selectedConversation = useMemo(
-    () => conversations.find((item) => item.id === selectedConversationId) ?? null,
+    () =>
+      conversations.find((item) => item.id === selectedConversationId) ?? null,
     [conversations, selectedConversationId],
   );
   const selectedConversationTurns = useMemo(
@@ -403,7 +490,8 @@ export default function ImagePage() {
     [selectedConversation],
   );
   const selectedConversationLastTurn = useMemo(
-    () => selectedConversationTurns[selectedConversationTurns.length - 1] ?? null,
+    () =>
+      selectedConversationTurns[selectedConversationTurns.length - 1] ?? null,
     [selectedConversationTurns],
   );
   const selectedConversationLastTurnKey = useMemo(() => {
@@ -411,17 +499,37 @@ export default function ImagePage() {
       return "";
     }
     const imageKey = selectedConversationLastTurn.images
-      .map((image) => `${image.id}:${image.status ?? "loading"}:${image.error ?? ""}`)
+      .map(
+        (image) =>
+          `${image.id}:${image.status ?? "loading"}:${image.error ?? ""}`,
+      )
       .join("|");
     return `${selectedConversationLastTurn.id}:${selectedConversationLastTurn.status}:${imageKey}`;
   }, [selectedConversationLastTurn]);
-  const parsedCount = useMemo(() => Math.max(1, Math.min(8, Number(imageCount) || 1)), [imageCount]);
-  const imageSources = useMemo(() => sourceImages.filter((item) => item.role === "image"), [sourceImages]);
-  const maskSource = useMemo(() => sourceImages.find((item) => item.role === "mask") ?? null, [sourceImages]);
-  const hasGenerateReferences = useMemo(() => mode === "generate" && imageSources.length > 0, [imageSources, mode]);
-  const restrictPaidResolutionPresets = mode === "generate" && !hasGenerateReferences;
-  const allowSelectedLargeResolution = hasAvailablePaidAccount || !restrictPaidResolutionPresets;
-  const currentResolutionPresets = useMemo(() => imageResolutionPresets[imageAspectRatio], [imageAspectRatio]);
+  const parsedCount = useMemo(
+    () => Math.max(1, Math.min(8, Number(imageCount) || 1)),
+    [imageCount],
+  );
+  const imageSources = useMemo(
+    () => sourceImages.filter((item) => item.role === "image"),
+    [sourceImages],
+  );
+  const maskSource = useMemo(
+    () => sourceImages.find((item) => item.role === "mask") ?? null,
+    [sourceImages],
+  );
+  const hasGenerateReferences = useMemo(
+    () => mode === "generate" && imageSources.length > 0,
+    [imageSources, mode],
+  );
+  const restrictPaidResolutionPresets =
+    mode === "generate" && !hasGenerateReferences;
+  const allowSelectedLargeResolution =
+    hasAvailablePaidAccount || !restrictPaidResolutionPresets;
+  const currentResolutionPresets = useMemo(
+    () => imageResolutionPresets[imageAspectRatio],
+    [imageAspectRatio],
+  );
   const imageResolutionTierOptions = useMemo(
     () =>
       currentResolutionPresets.map((item) => ({
@@ -431,11 +539,17 @@ export default function ImagePage() {
         value: item.tier,
         disabled: item.access === "paid" && !allowSelectedLargeResolution,
       })),
-    [allowSelectedLargeResolution, currentResolutionPresets, restrictPaidResolutionPresets],
+    [
+      allowSelectedLargeResolution,
+      currentResolutionPresets,
+      restrictPaidResolutionPresets,
+    ],
   );
   const imageResolutionTierLabel = useMemo(
     () =>
-      imageResolutionTierOptions.find((item) => item.value === imageResolutionTier && !item.disabled)?.label ??
+      imageResolutionTierOptions.find(
+        (item) => item.value === imageResolutionTier && !item.disabled,
+      )?.label ??
       imageResolutionTierOptions.find((item) => !item.disabled)?.label ??
       "",
     [imageResolutionTier, imageResolutionTierOptions],
@@ -443,11 +557,19 @@ export default function ImagePage() {
   const imageSize = useMemo(
     () =>
       currentResolutionPresets.find(
-        (item) => item.tier === imageResolutionTier && (allowSelectedLargeResolution || item.access === "free"),
+        (item) =>
+          item.tier === imageResolutionTier &&
+          (allowSelectedLargeResolution || item.access === "free"),
       )?.value ??
-      currentResolutionPresets.find((item) => allowSelectedLargeResolution || item.access === "free")?.value ??
+      currentResolutionPresets.find(
+        (item) => allowSelectedLargeResolution || item.access === "free",
+      )?.value ??
       currentResolutionPresets[0].value,
-    [allowSelectedLargeResolution, currentResolutionPresets, imageResolutionTier],
+    [
+      allowSelectedLargeResolution,
+      currentResolutionPresets,
+      imageResolutionTier,
+    ],
   );
   const imageSizeHint = useMemo(
     () => (
@@ -456,11 +578,13 @@ export default function ImagePage() {
           <>
             <div>
               <span className="font-semibold text-stone-800">分辨率限制：</span>
-              当前纯生成链路里，Free 账号通常按约 1.57M 像素总量控制；Paid 账号的图片最长边最高支持 3840。
+              当前纯生成链路里，Free 账号通常按约 1.57M 像素总量控制；Paid
+              账号的图片最长边最高支持 3840。
             </div>
             <div className="mt-2">
               <span className="font-semibold text-stone-800">账号要求：</span>
-              纯生成的 2K 及以上档位仍优先依赖 Paid 账号，所以没有可用 Paid 号时会保持禁用。
+              纯生成的 2K 及以上档位仍优先依赖 Paid 账号，所以没有可用 Paid
+              号时会保持禁用。
             </div>
           </>
         ) : (
@@ -471,7 +595,8 @@ export default function ImagePage() {
             </div>
             <div className="mt-2">
               <span className="font-semibold text-stone-800">链路差异：</span>
-              Responses / CPA 会直接透传 size；legacy 官方链路会按提示词尽量适配新画布，比例差异过大时可能扩图、补背景或重构构图。
+              Responses / CPA 会直接透传 size；legacy
+              官方链路会按提示词尽量适配新画布，比例差异过大时可能扩图、补背景或重构构图。
             </div>
           </>
         )}
@@ -479,15 +604,25 @@ export default function ImagePage() {
     ),
     [restrictPaidResolutionPresets],
   );
-  const activeConversationIds = new Set(listActiveImageTasks().map((task) => task.conversationId));
+  const activeConversationIds = new Set(
+    listActiveImageTasks().map((task) => task.conversationId),
+  );
   const processingStatus = useMemo(
     () =>
       activeRequest
-        ? buildProcessingStatus(activeRequest.mode, submitElapsedSeconds, activeRequest.count, activeRequest.variant)
+        ? buildProcessingStatus(
+            activeRequest.mode,
+            submitElapsedSeconds,
+            activeRequest.count,
+            activeRequest.variant,
+          )
         : null,
     [activeRequest, submitElapsedSeconds],
   );
-  const waitingDots = useMemo(() => buildWaitingDots(submitElapsedSeconds), [submitElapsedSeconds]);
+  const waitingDots = useMemo(
+    () => buildWaitingDots(submitElapsedSeconds),
+    [submitElapsedSeconds],
+  );
 
   useEffect(() => {
     mountedRef.current = true;
@@ -555,20 +690,34 @@ export default function ImagePage() {
     document.addEventListener("visibilitychange", refreshBootstrapWhenVisible);
     return () => {
       window.removeEventListener("focus", refreshBootstrap);
-      document.removeEventListener("visibilitychange", refreshBootstrapWhenVisible);
+      document.removeEventListener(
+        "visibilitychange",
+        refreshBootstrapWhenVisible,
+      );
     };
   }, []);
 
   useEffect(() => {
-    const selectedPreset = currentResolutionPresets.find((item) => item.tier === imageResolutionTier);
-    if (selectedPreset && (allowSelectedLargeResolution || selectedPreset.access === "free")) {
+    const selectedPreset = currentResolutionPresets.find(
+      (item) => item.tier === imageResolutionTier,
+    );
+    if (
+      selectedPreset &&
+      (allowSelectedLargeResolution || selectedPreset.access === "free")
+    ) {
       return;
     }
-    const nextPreset = currentResolutionPresets.find((item) => allowSelectedLargeResolution || item.access === "free");
+    const nextPreset = currentResolutionPresets.find(
+      (item) => allowSelectedLargeResolution || item.access === "free",
+    );
     if (nextPreset && nextPreset.tier !== imageResolutionTier) {
       setImageResolutionTier(nextPreset.tier);
     }
-  }, [allowSelectedLargeResolution, currentResolutionPresets, imageResolutionTier]);
+  }, [
+    allowSelectedLargeResolution,
+    currentResolutionPresets,
+    imageResolutionTier,
+  ]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const viewport = resultsViewportRef.current;
@@ -589,7 +738,8 @@ export default function ImagePage() {
     }
 
     const updateScrollState = () => {
-      const hiddenHeight = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop;
+      const hiddenHeight =
+        viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop;
       const hasOverflow = viewport.scrollHeight > viewport.clientHeight + 24;
       const nearBottom = hiddenHeight <= 96;
       isNearBottomRef.current = nearBottom;
@@ -604,12 +754,19 @@ export default function ImagePage() {
       viewport.removeEventListener("scroll", updateScrollState);
       window.removeEventListener("resize", updateScrollState);
     };
-  }, [selectedConversationId, selectedConversationTurns.length, selectedConversationLastTurnKey]);
+  }, [
+    selectedConversationId,
+    selectedConversationTurns.length,
+    selectedConversationLastTurnKey,
+  ]);
 
   useEffect(() => {
-    const conversationChanged = previousSelectedConversationIdRef.current !== selectedConversationId;
-    const turnCountIncreased = selectedConversationTurns.length > previousTurnCountRef.current;
-    const lastTurnChanged = previousLastTurnKeyRef.current !== selectedConversationLastTurnKey;
+    const conversationChanged =
+      previousSelectedConversationIdRef.current !== selectedConversationId;
+    const turnCountIncreased =
+      selectedConversationTurns.length > previousTurnCountRef.current;
+    const lastTurnChanged =
+      previousLastTurnKeyRef.current !== selectedConversationLastTurnKey;
 
     previousSelectedConversationIdRef.current = selectedConversationId;
     previousTurnCountRef.current = selectedConversationTurns.length;
@@ -619,7 +776,11 @@ export default function ImagePage() {
       return;
     }
 
-    if (!conversationChanged && !turnCountIncreased && !(lastTurnChanged && isNearBottomRef.current)) {
+    if (
+      !conversationChanged &&
+      !turnCountIncreased &&
+      !(lastTurnChanged && isNearBottomRef.current)
+    ) {
       return;
     }
 
@@ -645,7 +806,9 @@ export default function ImagePage() {
     }
 
     const updateElapsed = () => {
-      setSubmitElapsedSeconds(Math.max(0, Math.floor((Date.now() - submitStartedAt) / 1000)));
+      setSubmitElapsedSeconds(
+        Math.max(0, Math.floor((Date.now() - submitStartedAt) / 1000)),
+      );
     };
 
     updateElapsed();
@@ -662,84 +825,269 @@ export default function ImagePage() {
     }
 
     textarea.style.height = "auto";
-    const maxHeight = Math.min(480, Math.max(260, Math.floor(window.innerHeight * 0.42)));
+    const maxHeight = Math.min(
+      480,
+      Math.max(260, Math.floor(window.innerHeight * 0.42)),
+    );
     textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
-  }, [imagePrompt, mode]);
+  }, [activePromptKind, imagePrompt, mode, systemPrompt]);
 
-  const persistConversation = useCallback(async (conversation: ImageConversation) => {
-    const normalizedConversation = normalizeConversation(conversation);
-    await saveImageConversation(normalizedConversation);
-    if (!mountedRef.current) {
-      return;
-    }
-    draftSelectionRef.current = false;
-    setSelectedConversationId(normalizedConversation.id);
-    setConversations((prev) => {
-      const next = [normalizedConversation, ...prev.filter((item) => item.id !== normalizedConversation.id)];
-      return next.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const persistConversation = useCallback(
+    async (conversation: ImageConversation) => {
+      const normalizedConversation = normalizeConversation(conversation);
+      await saveImageConversation(normalizedConversation);
+      if (!mountedRef.current) {
+        return;
+      }
+      draftSelectionRef.current = false;
+      setSelectedConversationId(normalizedConversation.id);
+      setConversations((prev) => {
+        const next = [
+          normalizedConversation,
+          ...prev.filter((item) => item.id !== normalizedConversation.id),
+        ];
+        return next.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      });
+      syncRuntimeTaskState(normalizedConversation.id);
+    },
+    [setConversations, setSelectedConversationId, syncRuntimeTaskState],
+  );
+
+  const updateConversation = useCallback(
+    async (
+      conversationId: string,
+      updater: (current: ImageConversation | null) => ImageConversation,
+    ) => {
+      const nextConversation = await updateImageConversation(
+        conversationId,
+        updater,
+      );
+      if (!mountedRef.current) {
+        return;
+      }
+      setConversations((prev) => {
+        const next = [
+          nextConversation,
+          ...prev.filter((item) => item.id !== conversationId),
+        ];
+        return next.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      });
+    },
+    [setConversations],
+  );
+
+  const recoverImageGenerationTask = useCallback(
+    async (
+      conversationId: string,
+      turn: NonNullable<ImageConversation["turns"]>[number],
+    ) => {
+      const taskId = turn.taskId?.trim();
+      if (!taskId || turn.status !== "generating") {
+        return;
+      }
+
+      const recoveryKey = `${conversationId}:${turn.id}`;
+      if (recoveringTaskKeysRef.current.has(recoveryKey)) {
+        return;
+      }
+      recoveringTaskKeysRef.current.add(recoveryKey);
+
+      const expectedCount = Math.max(1, turn.count || 1);
+      const startedAt = Date.parse(turn.createdAt) || Date.now();
+      startImageTask({
+        conversationId,
+        turnId: turn.id,
+        taskId,
+        mode: turn.mode,
+        count: expectedCount,
+        variant: "standard",
+        startedAt,
+      });
+      syncRuntimeTaskState(conversationId);
+
+      try {
+        let task = (await fetchImageGenerationTask(taskId)).task;
+        while (task.status === "queued" || task.status === "running") {
+          await wait(imageGenerationTaskPollIntervalMs);
+          task = (await fetchImageGenerationTask(taskId)).task;
+        }
+
+        if (task.status === "failed") {
+          throw new Error(task.error || "图片生成失败");
+        }
+        if (!task.result) {
+          throw new Error("图片生成任务没有返回结果");
+        }
+
+        const resultItems = mergeResultImages(
+          turn.id,
+          task.result.data || [],
+          expectedCount,
+        );
+        const failedCount = countFailures(resultItems);
+        await updateConversation(conversationId, (current) => ({
+          ...(current ??
+            normalizeConversation({
+              id: conversationId,
+              title: turn.title,
+              mode: turn.mode,
+              prompt: turn.prompt,
+              systemPrompt: turn.systemPrompt,
+              model: turn.model,
+              count: turn.count,
+              size: turn.size,
+              quality: turn.quality,
+              scale: turn.scale,
+              imageRoute: turn.imageRoute,
+              sourceImages: turn.sourceImages,
+              images: turn.images,
+              createdAt: turn.createdAt,
+              status: turn.status,
+              error: turn.error,
+              turns: [turn],
+            })),
+          turns: (current?.turns ?? [turn]).map((item) =>
+            item.id === turn.id
+              ? {
+                  ...item,
+                  images: resultItems,
+                  status: failedCount > 0 ? "error" : "success",
+                  error:
+                    failedCount > 0
+                      ? `其中 ${failedCount} 张处理失败`
+                      : undefined,
+                }
+              : item,
+          ),
+        }));
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "图片生成任务恢复失败";
+        await updateConversation(conversationId, (current) => ({
+          ...(current ??
+            normalizeConversation({
+              id: conversationId,
+              title: turn.title,
+              mode: turn.mode,
+              prompt: turn.prompt,
+              systemPrompt: turn.systemPrompt,
+              model: turn.model,
+              count: turn.count,
+              size: turn.size,
+              quality: turn.quality,
+              scale: turn.scale,
+              imageRoute: turn.imageRoute,
+              sourceImages: turn.sourceImages,
+              images: turn.images,
+              createdAt: turn.createdAt,
+              status: turn.status,
+              error: turn.error,
+              turns: [turn],
+            })),
+          turns: (current?.turns ?? [turn]).map((item) =>
+            item.id === turn.id
+              ? {
+                  ...item,
+                  status: "error",
+                  error: message,
+                  images: item.images.map((image) =>
+                    image.status === "loading"
+                      ? {
+                          ...image,
+                          status: "error" as const,
+                          error: message,
+                        }
+                      : image,
+                  ),
+                }
+              : item,
+          ),
+        }));
+      } finally {
+        finishImageTask(conversationId, turn.id);
+        recoveringTaskKeysRef.current.delete(recoveryKey);
+        syncRuntimeTaskState(conversationId);
+      }
+    },
+    [syncRuntimeTaskState, updateConversation],
+  );
+
+  useEffect(() => {
+    conversations.forEach((conversation) => {
+      (conversation.turns ?? []).forEach((turn) => {
+        if (turn.status !== "generating") {
+          return;
+        }
+        const activeTask = listActiveImageTasks().find(
+          (task) =>
+            task.conversationId === conversation.id && task.turnId === turn.id,
+        );
+        const taskId = turn.taskId || activeTask?.taskId;
+        if (taskId) {
+          void recoverImageGenerationTask(conversation.id, { ...turn, taskId });
+        }
+      });
     });
-    syncRuntimeTaskState(normalizedConversation.id);
-  }, [setConversations, setSelectedConversationId, syncRuntimeTaskState]);
+  }, [conversations, recoverImageGenerationTask]);
 
-  const updateConversation = useCallback(async (
-    conversationId: string,
-    updater: (current: ImageConversation | null) => ImageConversation,
-  ) => {
-    const nextConversation = await updateImageConversation(conversationId, updater);
-    if (!mountedRef.current) {
-      return;
-    }
-    setConversations((prev) => {
-      const next = [nextConversation, ...prev.filter((item) => item.id !== conversationId)];
-      return next.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const resetComposer = useCallback(
+    (nextMode: ImageMode = mode) => {
+      setMode(nextMode);
+      setImagePrompt("");
+      setSystemPrompt("");
+      setActivePromptKind("user");
+      setImageCount("1");
+      setUpscaleScale("2x");
+      setSourceImages([]);
+    },
+    [mode, setSourceImages],
+  );
+
+  const applyPromptExample = useCallback(
+    (example: (typeof inspirationExamples)[number]) => {
+      setMode("generate");
+      setImageCount(String(example.count));
+      setImagePrompt(example.prompt);
+      setSystemPrompt("");
+      setActivePromptKind("user");
+      openDraftConversation();
+      setSourceImages([]);
+      textareaRef.current?.focus();
+    },
+    [openDraftConversation, setSourceImages],
+  );
+
+  const { handleSelectionEditSubmit, handleRetryTurn, handleSubmit } =
+    useImageSubmit({
+      mode,
+      imagePrompt,
+      systemPrompt,
+      imageModel: "gpt-image-2",
+      imageSources,
+      maskSource,
+      sourceImages,
+      parsedCount,
+      imageSize,
+      imageQuality,
+      imageRoutePreference,
+      upscaleScale,
+      selectedConversationId,
+      editorTarget,
+      isSubmitting,
+      makeId,
+      focusConversation,
+      closeSelectionEditor,
+      setImagePrompt,
+      setSystemPrompt,
+      setSourceImages,
+      setIsSubmitting,
+      setActiveRequest,
+      setSubmitElapsedSeconds,
+      setSubmitStartedAt,
+      persistConversation,
+      updateConversation,
+      resetComposer,
     });
-  }, [setConversations]);
-
-  const resetComposer = useCallback((nextMode: ImageMode = mode) => {
-    setMode(nextMode);
-    setImagePrompt("");
-    setImageCount("1");
-    setUpscaleScale("2x");
-    setSourceImages([]);
-  }, [mode, setSourceImages]);
-
-  const applyPromptExample = useCallback((example: (typeof inspirationExamples)[number]) => {
-    setMode("generate");
-    setImageCount(String(example.count));
-    setImagePrompt(example.prompt);
-    openDraftConversation();
-    setSourceImages([]);
-    textareaRef.current?.focus();
-  }, [openDraftConversation, setSourceImages]);
-
-  const { handleSelectionEditSubmit, handleRetryTurn, handleSubmit } = useImageSubmit({
-    mode,
-    imagePrompt,
-    imageModel: "gpt-image-2",
-    imageSources,
-    maskSource,
-    sourceImages,
-    parsedCount,
-    imageSize,
-    imageQuality,
-    imageRoutePreference,
-    upscaleScale,
-    selectedConversationId,
-    editorTarget,
-    isSubmitting,
-    makeId,
-    focusConversation,
-    closeSelectionEditor,
-    setImagePrompt,
-    setSourceImages,
-    setIsSubmitting,
-    setActiveRequest,
-    setSubmitElapsedSeconds,
-    setSubmitStartedAt,
-    persistConversation,
-    updateConversation,
-    resetComposer,
-  });
 
   return (
     <section
@@ -782,9 +1130,15 @@ export default function ImagePage() {
         ) : null}
 
         <div className="relative min-h-0 flex-1 bg-[#fcfcfb]">
-          <div ref={resultsViewportRef} className="hide-scrollbar h-full min-h-0 overflow-y-auto">
+          <div
+            ref={resultsViewportRef}
+            className="hide-scrollbar h-full min-h-0 overflow-y-auto"
+          >
             {!selectedConversation ? (
-              <EmptyState inspirationExamples={inspirationExamples} onApplyPromptExample={applyPromptExample} />
+              <EmptyState
+                inspirationExamples={inspirationExamples}
+                onApplyPromptExample={applyPromptExample}
+              />
             ) : (
               <ConversationTurns
                 conversationId={selectedConversation.id}
@@ -835,18 +1189,28 @@ export default function ImagePage() {
           imageRoutePreference={imageRoutePreference}
           sourceImages={sourceImages}
           imagePrompt={imagePrompt}
+          systemPrompt={systemPrompt}
+          activePromptKind={activePromptKind}
           isSubmitting={isSubmitting}
           textareaRef={textareaRef}
           uploadInputRef={uploadInputRef}
           maskInputRef={maskInputRef}
           onModeChange={setMode}
           onImageCountChange={setImageCount}
-          onImageAspectRatioChange={(value) => setImageAspectRatio(value as ImageAspectRatio)}
-          onImageResolutionTierChange={(value) => setImageResolutionTier(value as ImageResolutionTier)}
-          onImageQualityChange={(value) => setImageQuality(value as ImageQuality)}
+          onImageAspectRatioChange={(value) =>
+            setImageAspectRatio(value as ImageAspectRatio)
+          }
+          onImageResolutionTierChange={(value) =>
+            setImageResolutionTier(value as ImageResolutionTier)
+          }
+          onImageQualityChange={(value) =>
+            setImageQuality(value as ImageQuality)
+          }
           onImageRoutePreferenceChange={setImageRoutePreference}
           onUpscaleScaleChange={setUpscaleScale}
           onPromptChange={setImagePrompt}
+          onSystemPromptChange={setSystemPrompt}
+          onActivePromptKindChange={setActivePromptKind}
           onPromptPaste={handlePromptPaste}
           onRemoveSourceImage={removeSourceImage}
           onAppendFiles={appendFiles}

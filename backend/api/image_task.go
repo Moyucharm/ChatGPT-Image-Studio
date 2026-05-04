@@ -188,6 +188,7 @@ func (s *Server) handleCreateImageGenerationTask(w http.ResponseWriter, r *http.
 		Quality        string `json:"quality"`
 		Background     string `json:"background"`
 		ImageRoute     string `json:"image_route"`
+		SystemPrompt   string `json:"system_prompt"`
 		ResponseFormat string `json:"response_format"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -219,6 +220,7 @@ func (s *Server) handleCreateImageGenerationTask(w http.ResponseWriter, r *http.
 			Quality:        req.Quality,
 			Background:     req.Background,
 			ImageRoute:     req.ImageRoute,
+			SystemPrompt:   req.SystemPrompt,
 			ResponseFormat: req.ResponseFormat,
 		}, taskRequest)
 	})

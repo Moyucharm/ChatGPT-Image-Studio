@@ -26,6 +26,7 @@ type imageGenerationRequest struct {
 	Quality        string
 	Background     string
 	ImageRoute     string
+	SystemPrompt   string
 	ResponseFormat string
 }
 
@@ -36,6 +37,7 @@ type imageEditRequest struct {
 	Mask           []byte
 	Size           string
 	ImageRoute     string
+	SystemPrompt   string
 	ResponseFormat string
 }
 
@@ -115,7 +117,7 @@ func (s *Server) executeImageGeneration(ctx context.Context, req imageGeneration
 			}
 		}
 
-		data, err := s.withImageResultsFilteredWithMetadata(ctx, "generate", responseFormat, "", requestedModel, true, allowAccount, req.ImageRoute, newImageRequestMetadata(prompt, size, req.Quality), func(client imageWorkflowClient, upstreamModel string) ([]handler.ImageResult, error) {
+		data, err := s.withImageResultsFilteredWithMetadata(ctx, "generate", responseFormat, "", requestedModel, true, allowAccount, req.ImageRoute, strings.TrimSpace(req.SystemPrompt), newImageRequestMetadata(prompt, size, req.Quality), func(client imageWorkflowClient, upstreamModel string) ([]handler.ImageResult, error) {
 			return client.GenerateImage(ctx, prompt, upstreamModel, 1, size, req.Quality, req.Background)
 		}, r)
 		if err != nil {
@@ -164,7 +166,7 @@ func (s *Server) executeImageEdit(ctx context.Context, req imageEditRequest, r *
 	requestedModel := normalizeRequestedImageModel(req.Model, s.cfg.ChatGPT.Model)
 	responseFormat := firstNonEmpty(req.ResponseFormat, s.cfg.App.ImageFormat, "url")
 	size := normalizeGenerateImageSize(req.Size)
-	data, err := s.withImageResultsWithMetadata(ctx, "edit", responseFormat, "", requestedModel, handler.SupportsResponsesInlineEdit(req.Images, req.Mask), req.ImageRoute, newImageRequestMetadata(prompt, size, ""), func(client imageWorkflowClient, upstreamModel string) ([]handler.ImageResult, error) {
+	data, err := s.withImageResultsWithMetadata(ctx, "edit", responseFormat, "", requestedModel, handler.SupportsResponsesInlineEdit(req.Images, req.Mask), req.ImageRoute, strings.TrimSpace(req.SystemPrompt), newImageRequestMetadata(prompt, size, ""), func(client imageWorkflowClient, upstreamModel string) ([]handler.ImageResult, error) {
 		return client.EditImageByUpload(ctx, prompt, upstreamModel, req.Images, req.Mask, size)
 	}, r)
 	if err != nil {
