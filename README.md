@@ -1,6 +1,6 @@
-# ChatGpt Image Studio
+# ChatGPT Image Studio
 
-ChatGpt Image Studio 是一个单服务交付的图片工作流项目：
+ChatGPT Image Studio 是一个单服务交付的图片工作流项目：
 
 - `backend/`：Go 后端，负责图片接口、账号池、配置管理和静态资源托管
 - `web/`：Vite + React 前端，构建后输出到 `web/dist`

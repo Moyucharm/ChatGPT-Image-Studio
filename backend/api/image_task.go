@@ -204,7 +204,7 @@ func (s *Server) handleCreateImageGenerationTask(w http.ResponseWriter, r *http.
 	}
 
 	if s.imageTasks == nil {
-		s.imageTasks = newImageTaskStore(2)
+		s.imageTasks = newImageTaskStore(5)
 	}
 
 	entry := s.imageTasks.create()

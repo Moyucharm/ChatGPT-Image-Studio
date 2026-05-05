@@ -54,7 +54,7 @@ func NewServer(cfg *config.Config, store *accounts.Store, syncClient *cliproxy.C
 		syncClient: syncClient,
 		staticDir:  cfg.ResolvePath(cfg.Server.StaticDir),
 		reqLogs:    newImageRequestLogStore(),
-		imageTasks: newImageTaskStore(2),
+		imageTasks: newImageTaskStore(5),
 		officialClientFactory: func(accessToken, proxyURL string, authData map[string]any, requestConfig handler.ImageRequestConfig) imageWorkflowClient {
 			return handler.NewChatGPTClientWithProxyAndConfig(
 				accessToken,

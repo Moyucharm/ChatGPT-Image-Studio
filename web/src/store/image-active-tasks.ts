@@ -6,6 +6,7 @@ export type ActiveImageTask = {
   conversationId: string;
   turnId: string;
   taskId?: string;
+  status?: "queued" | "running";
   mode: ImageMode;
   count: number;
   variant: "standard" | "selection-edit";
@@ -36,6 +37,10 @@ function normalizeTask(task: ActiveImageTask): ActiveImageTask | null {
     conversationId,
     turnId,
     taskId: String(task.taskId || "").trim() || undefined,
+    status:
+      task.status === "queued" || task.status === "running"
+        ? task.status
+        : undefined,
     mode:
       task.mode === "edit" || task.mode === "upscale" ? task.mode : "generate",
     count: Math.max(1, Number(task.count) || 1),
@@ -98,6 +103,26 @@ export function startImageTask(task: ActiveImageTask) {
 
 export function finishImageTask(conversationId: string, turnId: string) {
   activeTasks.delete(getTaskKey(conversationId, turnId));
+  persistActiveTasks();
+  notifyListeners();
+}
+
+export function updateImageTaskStatus(
+  conversationId: string,
+  turnId: string,
+  status: ActiveImageTask["status"],
+  taskId?: string,
+) {
+  const key = getTaskKey(conversationId, turnId);
+  const task = activeTasks.get(key);
+  if (!task) {
+    return;
+  }
+  activeTasks.set(key, {
+    ...task,
+    taskId: String(taskId || task.taskId || "").trim() || undefined,
+    status,
+  });
   persistActiveTasks();
   notifyListeners();
 }

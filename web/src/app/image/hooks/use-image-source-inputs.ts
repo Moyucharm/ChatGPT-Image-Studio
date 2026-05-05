@@ -18,7 +18,6 @@ export type EditorTarget = {
 
 type UseImageSourceInputsOptions = {
   mode: ImageMode;
-  isSubmitting: boolean;
   setMode: (mode: ImageMode) => void;
   setImagePrompt: (value: string) => void;
   focusConversation: (conversationId: string) => void;
@@ -41,7 +40,6 @@ function filterImageFiles(files: File[] | FileList | null) {
 
 export function useImageSourceInputs({
   mode,
-  isSubmitting,
   setMode,
   setImagePrompt,
   focusConversation,
@@ -52,11 +50,6 @@ export function useImageSourceInputs({
   const [editorTarget, setEditorTarget] = useState<EditorTarget | null>(null);
 
   const appendFiles = useCallback(async (files: File[] | FileList | null, role: "image" | "mask") => {
-    if (isSubmitting) {
-      toast.error("正在处理中，请稍后再添加图片");
-      return;
-    }
-
     const normalizedFiles = filterImageFiles(files);
     if (normalizedFiles.length === 0) {
       toast.error("仅支持添加图片文件");
@@ -85,12 +78,9 @@ export function useImageSourceInputs({
       }
       return [...prev.filter((item) => item.role !== "mask"), ...prev.filter((item) => item.role === "mask"), ...nextItems];
     });
-  }, [isSubmitting, makeId, mode]);
+  }, [makeId, mode]);
 
   const handlePromptPaste = useCallback((event: ReactClipboardEvent<HTMLTextAreaElement>) => {
-    if (isSubmitting) {
-      return;
-    }
     const clipboardImages = Array.from(event.clipboardData.items)
       .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
       .map((item) => item.getAsFile())
@@ -109,7 +99,7 @@ export function useImageSourceInputs({
           ? "已从剪贴板添加源图"
           : "已从剪贴板添加放大源图",
     );
-  }, [appendFiles, isSubmitting, mode]);
+  }, [appendFiles, mode]);
 
   const removeSourceImage = useCallback((id: string) => {
     setSourceImages((prev) => prev.filter((item) => item.id !== id));

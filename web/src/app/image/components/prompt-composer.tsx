@@ -13,7 +13,6 @@ import {
   ArrowUp,
   CircleHelp,
   ImagePlus,
-  LoaderCircle,
   Trash2,
 } from "lucide-react";
 
@@ -61,7 +60,6 @@ type PromptComposerProps = {
   imagePrompt: string;
   systemPrompt: string;
   activePromptKind: "user" | "system";
-  isSubmitting: boolean;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   uploadInputRef: RefObject<HTMLInputElement | null>;
   maskInputRef: RefObject<HTMLInputElement | null>;
@@ -105,7 +103,6 @@ export function PromptComposer({
   imagePrompt,
   systemPrompt,
   activePromptKind,
-  isSubmitting,
   textareaRef,
   uploadInputRef,
   maskInputRef,
@@ -171,7 +168,7 @@ export function PromptComposer({
     );
 
   const handleDragEnter = (event: ReactDragEvent<HTMLDivElement>) => {
-    if (isSubmitting || !hasImageFiles(event.dataTransfer)) {
+    if (!hasImageFiles(event.dataTransfer)) {
       return;
     }
     event.preventDefault();
@@ -180,7 +177,7 @@ export function PromptComposer({
   };
 
   const handleDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
-    if (isSubmitting || !hasImageFiles(event.dataTransfer)) {
+    if (!hasImageFiles(event.dataTransfer)) {
       return;
     }
     event.preventDefault();
@@ -200,7 +197,7 @@ export function PromptComposer({
   };
 
   const handleDrop = (event: ReactDragEvent<HTMLDivElement>) => {
-    if (isSubmitting || !hasImageFiles(event.dataTransfer)) {
+    if (!hasImageFiles(event.dataTransfer)) {
       return;
     }
     event.preventDefault();
@@ -289,9 +286,7 @@ export function PromptComposer({
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
-                  if (!isSubmitting) {
-                    void onSubmit();
-                  }
+                  void onSubmit();
                 }
               }}
               className="block min-h-[72px] max-h-[480px] resize-none border-0 bg-transparent !px-0 !py-2 text-[15px] leading-7 text-stone-900 shadow-none placeholder:text-stone-400 focus-visible:ring-0 overflow-y-auto"
@@ -384,14 +379,9 @@ export function PromptComposer({
                     event.stopPropagation();
                     void onSubmit();
                   }}
-                  disabled={isSubmitting}
                   aria-label="提交"
                 >
-                  {isSubmitting ? (
-                    <LoaderCircle className="size-4 animate-spin text-white/70" />
-                  ) : (
-                    <ArrowUp className="size-4" strokeWidth={3} />
-                  )}
+                  <ArrowUp className="size-4" strokeWidth={3} />
                 </button>
               </div>
             </div>

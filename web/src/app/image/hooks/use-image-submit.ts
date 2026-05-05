@@ -8,11 +8,17 @@ import {
   editImage,
   fetchImageGenerationTask,
   upscaleImage,
+  type ImageGenerationTask,
   type ImageModel,
   type ImageQuality,
   type ImageRoutePreference,
 } from "@/lib/api";
-import { finishImageTask, startImageTask } from "@/store/image-active-tasks";
+import {
+  finishImageTask,
+  listActiveImageTasks,
+  startImageTask,
+  updateImageTaskStatus,
+} from "@/store/image-active-tasks";
 import type {
   ImageConversation,
   ImageConversationTurn,
@@ -58,13 +64,14 @@ async function generateImageViaTask(
     quality: ImageQuality;
     imageRoute: ImageRoutePreference;
     systemPrompt?: string;
-    onTaskCreated?: (taskId: string) => Promise<void> | void;
+    onTaskCreated?: (task: ImageGenerationTask) => Promise<void> | void;
+    onTaskUpdated?: (task: ImageGenerationTask) => Promise<void> | void;
   },
 ) {
   const created = await createImageGenerationTask(prompt, options);
   let task = created.task;
   if (task.id) {
-    await options.onTaskCreated?.(task.id);
+    await options.onTaskCreated?.(task);
   }
   const startedAt = Date.now();
 
@@ -76,6 +83,7 @@ async function generateImageViaTask(
     }
     await wait(imageGenerationTaskPollIntervalMs);
     task = (await fetchImageGenerationTask(task.id)).task;
+    await options.onTaskUpdated?.(task);
   }
 
   if (task.status === "failed") {
@@ -85,6 +93,31 @@ async function generateImageViaTask(
     throw new Error("图片生成任务没有返回结果");
   }
   return task.result;
+}
+
+function syncSubmissionStateAfterFinish(
+  setIsSubmitting: (value: boolean) => void,
+  setActiveRequest: (value: ActiveRequestState | null) => void,
+  setSubmitStartedAt: (value: number | null) => void,
+) {
+  const nextTask = listActiveImageTasks()[0] ?? null;
+  setIsSubmitting(Boolean(nextTask));
+  setActiveRequest(
+    nextTask
+      ? {
+          conversationId: nextTask.conversationId,
+          turnId: nextTask.turnId,
+          mode: nextTask.mode,
+          count: nextTask.count,
+          variant: nextTask.variant,
+        }
+      : null,
+  );
+  setSubmitStartedAt(nextTask?.startedAt ?? null);
+}
+
+function normalizeActiveTaskStatus(status: ImageGenerationTask["status"]) {
+  return status === "queued" || status === "running" ? status : undefined;
 }
 
 type UseImageSubmitOptions = {
@@ -102,7 +135,6 @@ type UseImageSubmitOptions = {
   upscaleScale: string;
   selectedConversationId: string | null;
   editorTarget: EditorTarget | null;
-  isSubmitting: boolean;
   makeId: () => string;
   focusConversation: (conversationId: string) => void;
   closeSelectionEditor: () => void;
@@ -161,7 +193,6 @@ export function useImageSubmit({
   upscaleScale,
   selectedConversationId,
   editorTarget,
-  isSubmitting,
   makeId,
   focusConversation,
   closeSelectionEditor,
@@ -338,9 +369,11 @@ export function useImageSubmit({
         toast.error(message);
       } finally {
         finishImageTask(conversationId, turnId);
-        setIsSubmitting(false);
-        setActiveRequest(null);
-        setSubmitStartedAt(null);
+        syncSubmissionStateAfterFinish(
+          setIsSubmitting,
+          setActiveRequest,
+          setSubmitStartedAt,
+        );
       }
     },
     [
@@ -363,11 +396,6 @@ export function useImageSubmit({
 
   const handleRetryTurn = useCallback(
     async (conversationId: string, turn: ImageConversationTurn) => {
-      if (isSubmitting) {
-        toast.error("正在处理中，请稍后再试");
-        return;
-      }
-
       const prompt = turn.prompt?.trim() ?? "";
       const turnMode = turn.mode || "generate";
       const turnSourceImages = Array.isArray(turn.sourceImages)
@@ -479,7 +507,7 @@ export function useImageSubmit({
               quality: turnQuality,
               imageRoute: turnImageRoute,
               systemPrompt: turn.systemPrompt,
-              onTaskCreated: async (taskId) => {
+              onTaskCreated: async (task) => {
                 startImageTask({
                   conversationId,
                   turnId,
@@ -487,15 +515,23 @@ export function useImageSubmit({
                   count: expectedCount,
                   variant: "standard",
                   startedAt,
-                  taskId,
+                  taskId: task.id,
                 });
                 await updateConversation(conversationId, (current) => ({
                   ...(current ??
                     buildConversationBase(conversationId, draftTurn)),
                   turns: (current?.turns ?? [draftTurn]).map((item) =>
-                    item.id === turnId ? { ...item, taskId } : item,
+                    item.id === turnId ? { ...item, taskId: task.id } : item,
                   ),
                 }));
+              },
+              onTaskUpdated: async (task) => {
+                updateImageTaskStatus(
+                  conversationId,
+                  turnId,
+                  normalizeActiveTaskStatus(task.status),
+                  task.id,
+                );
               },
             });
             resultItems = mergeResultImages(
@@ -600,14 +636,15 @@ export function useImageSubmit({
         toast.error(message);
       } finally {
         finishImageTask(conversationId, turnId);
-        setIsSubmitting(false);
-        setActiveRequest(null);
-        setSubmitStartedAt(null);
+        syncSubmissionStateAfterFinish(
+          setIsSubmitting,
+          setActiveRequest,
+          setSubmitStartedAt,
+        );
       }
     },
     [
       focusConversation,
-      isSubmitting,
       setActiveRequest,
       setIsSubmitting,
       setSubmitElapsedSeconds,
@@ -619,11 +656,6 @@ export function useImageSubmit({
 
   const handleRerunTurn = useCallback(
     async (conversationId: string, turn: ImageConversationTurn) => {
-      if (isSubmitting) {
-        toast.error("正在处理中，请稍后再试");
-        return;
-      }
-
       const prompt = turn.prompt?.trim() ?? "";
       const turnMode = turn.mode || "generate";
       const turnSourceImages = Array.isArray(turn.sourceImages)
@@ -733,7 +765,7 @@ export function useImageSubmit({
               quality: turnQuality,
               imageRoute: turnImageRoute,
               systemPrompt: turn.systemPrompt,
-              onTaskCreated: async (taskId) => {
+              onTaskCreated: async (task) => {
                 startImageTask({
                   conversationId,
                   turnId,
@@ -741,15 +773,23 @@ export function useImageSubmit({
                   count: expectedCount,
                   variant: "standard",
                   startedAt,
-                  taskId,
+                  taskId: task.id,
                 });
                 await updateConversation(conversationId, (current) => ({
                   ...(current ??
                     buildConversationBase(conversationId, draftTurn)),
                   turns: (current?.turns ?? [draftTurn]).map((item) =>
-                    item.id === turnId ? { ...item, taskId } : item,
+                    item.id === turnId ? { ...item, taskId: task.id } : item,
                   ),
                 }));
+              },
+              onTaskUpdated: async (task) => {
+                updateImageTaskStatus(
+                  conversationId,
+                  turnId,
+                  normalizeActiveTaskStatus(task.status),
+                  task.id,
+                );
               },
             });
             resultItems = mergeResultImages(
@@ -856,14 +896,15 @@ export function useImageSubmit({
         toast.error(message);
       } finally {
         finishImageTask(conversationId, turnId);
-        setIsSubmitting(false);
-        setActiveRequest(null);
-        setSubmitStartedAt(null);
+        syncSubmissionStateAfterFinish(
+          setIsSubmitting,
+          setActiveRequest,
+          setSubmitStartedAt,
+        );
       }
     },
     [
       focusConversation,
-      isSubmitting,
       makeId,
       setActiveRequest,
       setIsSubmitting,
@@ -984,7 +1025,7 @@ export function useImageSubmit({
             quality: imageQuality,
             imageRoute: imageRoutePreference,
             systemPrompt: trimmedSystemPrompt,
-            onTaskCreated: async (taskId) => {
+            onTaskCreated: async (task) => {
               startImageTask({
                 conversationId,
                 turnId,
@@ -992,15 +1033,23 @@ export function useImageSubmit({
                 count: expectedCount,
                 variant: "standard",
                 startedAt,
-                taskId,
+                taskId: task.id,
               });
               await updateConversation(conversationId, (current) => ({
                 ...(current ??
                   buildConversationBase(conversationId, draftTurn)),
                 turns: (current?.turns ?? [draftTurn]).map((turn) =>
-                  turn.id === turnId ? { ...turn, taskId } : turn,
+                  turn.id === turnId ? { ...turn, taskId: task.id } : turn,
                 ),
               }));
+            },
+            onTaskUpdated: async (task) => {
+              updateImageTaskStatus(
+                conversationId,
+                turnId,
+                normalizeActiveTaskStatus(task.status),
+                task.id,
+              );
             },
           });
           resultItems = mergeResultImages(turnId, data.data || [], parsedCount);
@@ -1101,9 +1150,11 @@ export function useImageSubmit({
       toast.error(message);
     } finally {
       finishImageTask(conversationId, turnId);
-      setIsSubmitting(false);
-      setActiveRequest(null);
-      setSubmitStartedAt(null);
+      syncSubmissionStateAfterFinish(
+        setIsSubmitting,
+        setActiveRequest,
+        setSubmitStartedAt,
+      );
     }
   }, [
     focusConversation,

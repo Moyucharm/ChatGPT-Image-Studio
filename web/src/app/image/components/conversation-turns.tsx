@@ -20,6 +20,7 @@ import type {
   ImageMode,
   StoredImage,
 } from "@/store/image-conversations";
+import type { ActiveImageTask } from "@/store/image-active-tasks";
 
 import { formatImageErrorMessage } from "../submit-utils";
 import { buildConversationSourceLabel, buildImageDataUrl } from "../view-utils";
@@ -91,6 +92,7 @@ type ConversationTurnsProps = {
   turns: ImageConversationTurn[];
   modeLabelMap: Record<ImageMode, string>;
   activeRequest: ActiveRequestState | null;
+  activeTasks: ActiveImageTask[];
   isSubmitting: boolean;
   processingStatus: ProcessingStatus | null;
   waitingDots: string;
@@ -123,6 +125,7 @@ export function ConversationTurns({
   turns,
   modeLabelMap,
   activeRequest,
+  activeTasks,
   isSubmitting,
   processingStatus,
   waitingDots,
@@ -144,6 +147,12 @@ export function ConversationTurns({
           activeRequest.conversationId === conversationId &&
           activeRequest.turnId === turn.id,
         );
+        const activeTask = activeTasks.find(
+          (task) =>
+            task.conversationId === conversationId && task.turnId === turn.id,
+        );
+        const isTurnActive = Boolean(activeTask);
+        const isQueued = activeTask?.status === "queued";
 
         return (
           <div key={turn.id} className="space-y-4">
@@ -321,8 +330,8 @@ export function ConversationTurns({
                                 onClick={() =>
                                   void onRerunTurn(conversationId, turn)
                                 }
-                                disabled={isSubmitting}
-                                title={isSubmitting ? "处理中" : "重试"}
+                                disabled={isTurnActive}
+                                title={isTurnActive ? "当前任务处理中" : "重试"}
                                 aria-label="重试"
                               >
                                 <RotateCcw className="size-4" />
@@ -382,8 +391,8 @@ export function ConversationTurns({
                                 onClick={() =>
                                   void onRetryTurn(conversationId, turn)
                                 }
-                                disabled={isSubmitting}
-                                title={isSubmitting ? "处理中" : "重试"}
+                                disabled={isTurnActive}
+                                title={isTurnActive ? "当前任务处理中" : "重试"}
                                 aria-label="重试"
                               >
                                 <RotateCcw className="size-4" />
@@ -396,14 +405,18 @@ export function ConversationTurns({
                               <LoaderCircle className="size-5 animate-spin" />
                             </div>
                             <p className="text-sm font-medium text-stone-700">
-                              {turnProcessing && processingStatus
-                                ? `${processingStatus.title}${waitingDots}`
-                                : "正在处理图片..."}
+                              {isQueued
+                                ? `任务已排队${waitingDots}`
+                                : turnProcessing && processingStatus
+                                  ? `${processingStatus.title}${waitingDots}`
+                                  : "正在处理图片..."}
                             </p>
                             <p className="text-xs leading-6 text-stone-400">
-                              {turnProcessing && processingStatus
-                                ? `${processingStatus.detail} · 已等待 ${formatProcessingDuration(submitElapsedSeconds)}`
-                                : "图片处理通常需要几十秒，请稍候"}
+                              {isQueued
+                                ? "已超过当前并发上限，正在等待空闲生成通道"
+                                : turnProcessing && processingStatus
+                                  ? `${processingStatus.detail} · 已等待 ${formatProcessingDuration(submitElapsedSeconds)}`
+                                  : "图片处理通常需要几十秒，请稍候"}
                             </p>
                           </div>
                         )}

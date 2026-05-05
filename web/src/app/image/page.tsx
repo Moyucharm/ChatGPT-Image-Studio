@@ -25,6 +25,7 @@ import {
   listActiveImageTasks,
   startImageTask,
   subscribeImageTasks,
+  updateImageTaskStatus,
 } from "@/store/image-active-tasks";
 import { ConversationTurns } from "./components/conversation-turns";
 import { EmptyState } from "./components/empty-state";
@@ -206,6 +207,10 @@ type ActiveRequestState = {
   count: number;
   variant: "standard" | "selection-edit";
 };
+
+function normalizeActiveTaskStatus(status: string) {
+  return status === "queued" || status === "running" ? status : undefined;
+}
 
 function formatConversationTime(value: string) {
   const date = new Date(value);
@@ -472,7 +477,6 @@ export default function ImagePage() {
     closeSelectionEditor,
   } = useImageSourceInputs({
     mode,
-    isSubmitting,
     setMode,
     setImagePrompt,
     focusConversation,
@@ -604,8 +608,9 @@ export default function ImagePage() {
     ),
     [restrictPaidResolutionPresets],
   );
+  const activeImageTasks = listActiveImageTasks();
   const activeConversationIds = new Set(
-    listActiveImageTasks().map((task) => task.conversationId),
+    activeImageTasks.map((task) => task.conversationId),
   );
   const processingStatus = useMemo(
     () =>
@@ -907,9 +912,21 @@ export default function ImagePage() {
 
       try {
         let task = (await fetchImageGenerationTask(taskId)).task;
+        updateImageTaskStatus(
+          conversationId,
+          turn.id,
+          normalizeActiveTaskStatus(task.status),
+          task.id,
+        );
         while (task.status === "queued" || task.status === "running") {
           await wait(imageGenerationTaskPollIntervalMs);
           task = (await fetchImageGenerationTask(taskId)).task;
+          updateImageTaskStatus(
+            conversationId,
+            turn.id,
+            normalizeActiveTaskStatus(task.status),
+            task.id,
+          );
         }
 
         if (task.status === "failed") {
@@ -1077,7 +1094,6 @@ export default function ImagePage() {
     upscaleScale,
     selectedConversationId,
     editorTarget,
-    isSubmitting,
     makeId,
     focusConversation,
     closeSelectionEditor,
@@ -1149,6 +1165,7 @@ export default function ImagePage() {
                 turns={selectedConversationTurns}
                 modeLabelMap={modeLabelMap}
                 activeRequest={activeRequest}
+                activeTasks={activeImageTasks}
                 isSubmitting={isSubmitting}
                 processingStatus={processingStatus}
                 waitingDots={waitingDots}
@@ -1196,7 +1213,6 @@ export default function ImagePage() {
           imagePrompt={imagePrompt}
           systemPrompt={systemPrompt}
           activePromptKind={activePromptKind}
-          isSubmitting={isSubmitting}
           textareaRef={textareaRef}
           uploadInputRef={uploadInputRef}
           maskInputRef={maskInputRef}
@@ -1228,12 +1244,8 @@ export default function ImagePage() {
         open={Boolean(editorTarget)}
         imageName={editorTarget?.imageName || "image.png"}
         imageSrc={editorTarget?.sourceDataUrl || ""}
-        isSubmitting={isSubmitting}
-        onClose={() => {
-          if (!isSubmitting) {
-            closeSelectionEditor();
-          }
-        }}
+        isSubmitting={false}
+        onClose={closeSelectionEditor}
         onSubmit={handleSelectionEditSubmit}
       />
     </section>
